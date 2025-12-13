@@ -8,28 +8,50 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 // === CONFIG FOR F1/F2 ===
 const seriesConfigs = {
   F1: {
-    teamRoleIds: { "Ferrari": "1449475924696240230", "Redbull": "1449475946913468507", "Mercedes": "1449478536720023562" },
+    teamRoleIds: { 
+      "McLaren F1 team": "1432661469975281724", 
+      "Mercedes-AMG PETRONAS F1 team": "1432661710849703998", 
+      "Oracle Red Bull Racing F1 team": "1432661838146834525",
+      "Scuderia Ferrari F1 team": "1432662095182172241", 
+      "MoneyGram Haas F1 team": "1432662285444190279", 
+      "Williams Racing F1 team": "1432662869245296641",
+      "BWT Alpine F1 team": "1432663841346555984", 
+      "Visa Cash App Racing Bulls F1 team": "1432664100848144447", 
+      "Aston Martin Aramco F1 team": "1432664278862790746",
+      "Stake F1 team Kick Sauber": "1432664415450304582",
+                 },
     playerRoles: { 
-      "Team Principal": { id: "1449471486061445151", max: 1 },
-      "Main Driver": { id: "1449471495167279105", max: 2 },
-      "Reserve Driver": { id: "1449471496152940554", max: 2 },
-      "Engineer": { id: "1449471498464268429", max: 2 }
+      "Team Principal F1": { id: "1432668072870940754", max: 1 },
+      "Main Driver F1": { id: "1432738660075442377", max: 2 },
+      "Reserve Driver F1": { id: "1432739468770541739", max: 2 },
+      "Engineer F1": { id: "1432786005106102342", max: 2 }
     },
-    adminRoles: [ "1439978039151689788" ],
-    updateChannelId: "1449474143367200939",
-    liveLineupChannelId: "1449488568161402993"
+    adminRoles: [ "1432285963287003156" ],
+    updateChannelId: "1432370687888064735",
+    liveLineupChannelId: "1432370391929716787"
   },
   F2: {
-    teamRoleIds: { "Ferrari": "1449489739865395402", "Redbull": "1449489663667605637" },
-    playerRoles: { 
-      "Team Principal": { id: "1449489674942021754", max: 1 },
-      "Main Driver": { id: "1449489716477952070", max: 2 },
-      "Reserve Driver": { id: "1449489720000000000", max: 2 },
-      "Engineer": { id: "1449489725000000000", max: 2 }
+    teamRoleIds: { 
+      "McLaren F2 team": "1432691339094528053", 
+      "Mercedes-AMG PETRONAS F2 team": "1432721882582614058", 
+      "Oracle Red Bull Racing F2 team": "1432362082250260640",
+      "Scuderia Ferrari F2 team": "1432734720449577101", 
+      "MoneyGram Haas F2 team": "1432734837248360448", 
+      "Williams Racing F2 team": "1432734965577285855",
+      "BWT Alpine F2 team": "1432735063640113254", 
+      "Visa Cash App Racing Bulls F2 team": "1432735203645722695", 
+      "Aston Martin Aramco F2 team": "1432735425327399063",
+      "Stake F2 team Kick Sauber": "1432735535763427458",
     },
-    adminRoles: [ "1439978039151689788" ],
-    updateChannelId: "1449489596583907471",
-    liveLineupChannelId: "1449489610483695746"
+    playerRoles: { 
+      "Team Principal F2": { id: "1432668794911854635", max: 1 },
+      "Main Driver F2": { id: "1436021035638984806", max: 2 },
+      "Reserve Driver F2": { id: "1436021153977077771", max: 2 },
+      "Engineer F2": { id: "1435197815461642400", max: 2 }
+    },
+    adminRoles: [ "1432285963287003156" ],
+    updateChannelId: "1432371785181040640",
+    liveLineupChannelId: "1432371611927056544"
   }
 };
 
