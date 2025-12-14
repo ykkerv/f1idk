@@ -193,15 +193,26 @@ const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user.tag}`);
+
+  // ✅ START CRONITOR HERE
+  startCronitorHeartbeat();
+
   try {
-    await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
+    await rest.put(
+      Routes.applicationCommands(process.env.CLIENT_ID),
+      { body: commands }
+    );
     console.log("Commands registered!");
+
     client.guilds.cache.forEach(guild => {
       updateLiveLineup(guild, "F1");
       updateLiveLineup(guild, "F2");
     });
-  } catch (err) { console.error(err); }
+  } catch (err) {
+    console.error(err);
+  }
 });
+
 
 client.login(process.env.DISCORD_TOKEN);
 
