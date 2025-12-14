@@ -99,9 +99,9 @@ const seriesConfigs = {
 // ========================
 // DATA FILES
 // ========================
-const assignedFile = "./assignedPlayers.json";
-const registrationFile = "./registrationData.json";
-const liveEmbedFile = "./liveLineup.json";
+const assignedFile = "/data/assignedPlayers.json";
+const registrationFile = "/data/registrationData.json";
+const liveEmbedFile = "/data/liveLineup.json";
 
 // Load data
 let assignedPlayers = fs.existsSync(assignedFile) ? JSON.parse(fs.readFileSync(assignedFile, "utf8")) : {};
