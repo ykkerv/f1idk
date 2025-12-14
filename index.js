@@ -1,4 +1,21 @@
+const CRONITOR_URL =
+  "https://cronitor.link/p/5228af7c42f54ba681f4b7c436c08f1b/luqCyv";
 
+let heartbeatStarted = false;
+
+function startCronitorHeartbeat() {
+  if (heartbeatStarted) return;
+  heartbeatStarted = true;
+
+  setInterval(async () => {
+    try {
+      await fetch(CRONITOR_URL);
+      console.log("Cronitor heartbeat sent");
+    } catch (err) {
+      console.error("Cronitor heartbeat failed");
+    }
+  }, 60 * 1000); // every 1 minute
+}
 
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import fs from "fs";
