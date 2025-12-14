@@ -1,5 +1,4 @@
 {
-  // ========== F1 ==========
   "1170790804554530828": { "series": "F1", "team": "Scuderia Ferrari F1 team", "role": "Main Driver F1" },
   "1298178343052513330": { "series": "F1", "team": "Scuderia Ferrari F1 team", "role": "Main Driver F1" },
 
@@ -28,7 +27,6 @@
   "518740889191841803": { "series": "F1", "team": "Mercedes-AMG PETRONAS F1 team", "role": "Main Driver F1" },
   "1252600408111714374": { "series": "F1", "team": "Mercedes-AMG PETRONAS F1 team", "role": "Reserve Driver F1" },
 
-  // ========== F2 ==========
   "1153396013009215591": { "series": "F2", "team": "McLaren F2 team", "role": "Team Principal F2" },
   "1170790804554530828": { "series": "F2", "team": "McLaren F2 team", "role": "Main Driver F2" },
 
