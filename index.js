@@ -99,24 +99,49 @@ const seriesConfigs = {
 // ========================
 // DATA FILES
 // ========================
+
+// ========================
+// FILE PATHS
+// ========================
 const assignedFile = "./data/assignedPlayers.json";
-const registrationFile = "/data/registrationData.json";
-const liveEmbedFile = "/data/liveLineup.json";
+const registrationFile = "./data/registrationData.json";
+const liveEmbedFile = "./data/liveLineup.json";
 
-// Load data
-let assignedPlayers = fs.existsSync(assignedFile)
-  ? JSON.parse(fs.readFileSync(assignedFile, "utf8"))
-  : {};
-let registrationData = fs.existsSync(registrationFile) ? JSON.parse(fs.readFileSync(registrationFile, "utf8")) : {};
-let liveLineupIds = fs.existsSync(liveEmbedFile)
-  ? JSON.parse(fs.readFileSync(liveEmbedFile, "utf8"))
-  : { F1: null, F2: null };
+// ========================
+// LOAD OR INITIALIZE DATA
+// ========================
 
-// Save helpers
+// assignedPlayers
+let assignedPlayers = {};
+if (fs.existsSync(assignedFile)) {
+  assignedPlayers = JSON.parse(fs.readFileSync(assignedFile, "utf8"));
+} else {
+  fs.writeFileSync(assignedFile, JSON.stringify({}, null, 2));
+}
+
+// registrationData
+let registrationData = {};
+if (fs.existsSync(registrationFile)) {
+  registrationData = JSON.parse(fs.readFileSync(registrationFile, "utf8"));
+} else {
+  fs.writeFileSync(registrationFile, JSON.stringify({}, null, 2));
+}
+
+// liveLineupIds
+let liveLineupIds = {};
+if (fs.existsSync(liveEmbedFile)) {
+  liveLineupIds = JSON.parse(fs.readFileSync(liveEmbedFile, "utf8"));
+} else {
+  liveLineupIds = { F1: null, F2: null };
+  fs.writeFileSync(liveEmbedFile, JSON.stringify(liveLineupIds, null, 2));
+}
+
+// ========================
+// SAVE HELPERS
+// ========================
 const saveAssigned = () => fs.writeFileSync(assignedFile, JSON.stringify(assignedPlayers, null, 2));
 const saveRegistration = () => fs.writeFileSync(registrationFile, JSON.stringify(registrationData, null, 2));
 const saveLiveEmbedIds = () => fs.writeFileSync(liveEmbedFile, JSON.stringify(liveLineupIds, null, 2));
-
 // ========================
 // HELPER FUNCTIONS
 // ========================
