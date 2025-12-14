@@ -17,7 +17,7 @@ function startCronitorHeartbeat() {
     } catch (err) {
       console.error("Cronitor heartbeat failed", err);
     }
-  }, 60 * 1000); // every 1 minute
+  }, 5 * 1000); // every 1 minute
 }
 
 // ========================
