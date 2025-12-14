@@ -1,15 +1,4 @@
-// index.js
-const express = require("express");
-const app = express();
 
-// This is the endpoint Cronitor will ping
-app.get("/", (req, res) => {
-    res.send("Bot is alive!");
-});
-
-// Listen on the port Render provides
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Health server running on port ${PORT}`));
 
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import fs from "fs";
