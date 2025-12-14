@@ -81,12 +81,14 @@ const liveEmbedFile = "./liveLineup.json";
 // Load data
 let assignedPlayers = fs.existsSync(assignedFile) ? JSON.parse(fs.readFileSync(assignedFile, "utf8")) : {};
 let registrationData = fs.existsSync(registrationFile) ? JSON.parse(fs.readFileSync(registrationFile, "utf8")) : {};
-let liveLineupMessageId = fs.existsSync(liveEmbedFile) ? JSON.parse(fs.readFileSync(liveEmbedFile, "utf8")).messageId : null;
+let liveLineupIds = fs.existsSync(liveEmbedFile)
+  ? JSON.parse(fs.readFileSync(liveEmbedFile, "utf8"))
+  : { F1: null, F2: null };
 
 // Save helpers
 const saveAssigned = () => fs.writeFileSync(assignedFile, JSON.stringify(assignedPlayers, null, 2));
 const saveRegistration = () => fs.writeFileSync(registrationFile, JSON.stringify(registrationData, null, 2));
-const saveLiveEmbedId = () => fs.writeFileSync(liveEmbedFile, JSON.stringify({ messageId: liveLineupMessageId }, null, 2));
+const saveLiveEmbedIds = () => fs.writeFileSync(liveEmbedFile, JSON.stringify(liveLineupIds, null, 2));
 
 // === HELPER FUNCTIONS ===
 const sendEmbed = async (guild, title, description, color, executorTag, updateChannelId) => {
@@ -127,16 +129,16 @@ const updateLiveLineup = async (guild, series) => {
   const channel = guild.channels.cache.get(config.liveLineupChannelId);
   if (!channel?.isTextBased()) return;
 
-  if (liveLineupMessageId) {
-    try {
-      const msg = await channel.messages.fetch(liveLineupMessageId);
-      if (msg) return await msg.edit({ embeds: [embed] });
-    } catch {}
-  }
+if (liveLineupIds[series]) {
+  try {
+    const msg = await channel.messages.fetch(liveLineupIds[series]);
+    if (msg) return await msg.edit({ embeds: [embed] });
+  } catch {}
+}
 
-  const msg = await channel.send({ embeds: [embed] });
-  liveLineupMessageId = msg.id;
-  saveLiveEmbedId();
+const msg = await channel.send({ embeds: [embed] });
+liveLineupIds[series] = msg.id;
+saveLiveEmbedIds();
 };
 
 // === COMMANDS ===
