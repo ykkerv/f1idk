@@ -1,3 +1,6 @@
+// ========================
+// CRONITOR HEARTBEAT
+// ========================
 const CRONITOR_URL =
   "https://cronitor.link/p/5228af7c42f54ba681f4b7c436c08f1b/luqCyv";
 
@@ -12,18 +15,37 @@ function startCronitorHeartbeat() {
       await fetch(CRONITOR_URL);
       console.log("Cronitor heartbeat sent");
     } catch (err) {
-      console.error("Cronitor heartbeat failed");
+      console.error("Cronitor heartbeat failed", err);
     }
   }, 60 * 1000); // every 1 minute
 }
 
+// ========================
+// IMPORTS
+// ========================
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import fs from "fs";
 import 'dotenv/config';
+import express from "express";
 
+// ========================
+// EXPRESS HEALTH CHECK
+// ========================
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get("/", (req, res) => res.send("Bot is alive!"));
+
+app.listen(PORT, () => console.log(`Health check server running on port ${PORT}`));
+
+// ========================
+// DISCORD CLIENT
+// ========================
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
 
-// === CONFIG FOR F1/F2 ===
+// ========================
+// CONFIG FOR F1/F2
+// ========================
 const seriesConfigs = {
   F1: {
     teamRoleIds: { 
@@ -37,7 +59,7 @@ const seriesConfigs = {
       "Visa Cash App Racing Bulls F1 team": "1432664100848144447", 
       "Aston Martin Aramco F1 team": "1432664278862790746",
       "Stake F1 team Kick Sauber": "1432664415450304582",
-                 },
+    },
     playerRoles: { 
       "Team Principal F1": { id: "1432668072870940754", max: 1 },
       "Main Driver F1": { id: "1432738660075442377", max: 2 },
@@ -73,7 +95,9 @@ const seriesConfigs = {
   }
 };
 
-// === DATA FILES ===
+// ========================
+// DATA FILES
+// ========================
 const assignedFile = "./assignedPlayers.json";
 const registrationFile = "./registrationData.json";
 const liveEmbedFile = "./liveLineup.json";
@@ -90,7 +114,9 @@ const saveAssigned = () => fs.writeFileSync(assignedFile, JSON.stringify(assigne
 const saveRegistration = () => fs.writeFileSync(registrationFile, JSON.stringify(registrationData, null, 2));
 const saveLiveEmbedIds = () => fs.writeFileSync(liveEmbedFile, JSON.stringify(liveLineupIds, null, 2));
 
-// === HELPER FUNCTIONS ===
+// ========================
+// HELPER FUNCTIONS
+// ========================
 const sendEmbed = async (guild, title, description, color, executorTag, updateChannelId) => {
   const embed = new EmbedBuilder()
     .setTitle(`Team Update: ${title}`)
@@ -111,7 +137,9 @@ const isCarNumberTaken = (series, number, userId) => {
   return Object.entries(registrationData).some(([uid, data]) => data.series === series && data.carnumber === number && uid !== userId);
 };
 
-// === LIVE LINEUP UPDATER ===
+// ========================
+// LIVE LINEUP UPDATER
+// ========================
 const updateLiveLineup = async (guild, series) => {
   const config = seriesConfigs[series];
   const embed = new EmbedBuilder().setTitle(`${series} Live Team Lineup`).setColor("Gold").setTimestamp();
@@ -129,19 +157,21 @@ const updateLiveLineup = async (guild, series) => {
   const channel = guild.channels.cache.get(config.liveLineupChannelId);
   if (!channel?.isTextBased()) return;
 
-if (liveLineupIds[series]) {
-  try {
-    const msg = await channel.messages.fetch(liveLineupIds[series]);
-    if (msg) return await msg.edit({ embeds: [embed] });
-  } catch {}
-}
+  if (liveLineupIds[series]) {
+    try {
+      const msg = await channel.messages.fetch(liveLineupIds[series]);
+      if (msg) return await msg.edit({ embeds: [embed] });
+    } catch {}
+  }
 
-const msg = await channel.send({ embeds: [embed] });
-liveLineupIds[series] = msg.id;
-saveLiveEmbedIds();
+  const msg = await channel.send({ embeds: [embed] });
+  liveLineupIds[series] = msg.id;
+  saveLiveEmbedIds();
 };
 
-// === COMMANDS ===
+// ========================
+// COMMANDS
+// ========================
 const seriesChoices = [
   { name: "F1", value: "F1" },
   { name: "F2", value: "F2" }
@@ -190,13 +220,18 @@ const commands = [
     .setName("resetdata").setDescription("Reset all bot data (admin only)")
 ].map(c => c.toJSON());
 
-// === REST client ===
+// ========================
+// REST CLIENT
+// ========================
 const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 
+// ========================
+// CLIENT READY
+// ========================
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
-  // ✅ START CRONITOR HERE
+  // ✅ START CRONITOR HEARTBEAT
   startCronitorHeartbeat();
 
   try {
@@ -215,10 +250,14 @@ client.once("ready", async () => {
   }
 });
 
-
+// ========================
+// CLIENT LOGIN
+// ========================
 client.login(process.env.DISCORD_TOKEN);
 
-// === AUTOCOMPLETE HANDLER ===
+// ========================
+// AUTOCOMPLETE HANDLER
+// ========================
 client.on("interactionCreate", async interaction => {
   if (interaction.isAutocomplete()) {
     const focused = interaction.options.getFocused(true);
@@ -240,7 +279,9 @@ client.on("interactionCreate", async interaction => {
   }
 });
 
-// === INTERACTION HANDLER ===
+// ========================
+// INTERACTION HANDLER
+// ========================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
   const { commandName, options, user, guild } = interaction;
@@ -274,8 +315,8 @@ client.on("interactionCreate", async (interaction) => {
     if (user.id !== "902878740659441674") return interaction.reply({ content: "Not authorized.", ephemeral: true });
     assignedPlayers = {};
     registrationData = {};
-    liveLineupMessageId = null;
-    saveAssigned(); saveRegistration(); saveLiveEmbedId();
+    liveLineupIds = { F1: null, F2: null };
+    saveAssigned(); saveRegistration(); saveLiveEmbedIds();
     return interaction.reply({ content: "✅ All bot data reset!", ephemeral: true });
   }
 
