@@ -99,12 +99,14 @@ const seriesConfigs = {
 // ========================
 // DATA FILES
 // ========================
-const assignedFile = "/data/assignedPlayers.json";
+const assignedFile = "./data/assignedPlayers.json";
 const registrationFile = "/data/registrationData.json";
 const liveEmbedFile = "/data/liveLineup.json";
 
 // Load data
-let assignedPlayers = fs.existsSync(assignedFile) ? JSON.parse(fs.readFileSync(assignedFile, "utf8")) : {};
+let assignedPlayers = fs.existsSync(assignedFile)
+  ? JSON.parse(fs.readFileSync(assignedFile, "utf8"))
+  : {};
 let registrationData = fs.existsSync(registrationFile) ? JSON.parse(fs.readFileSync(registrationFile, "utf8")) : {};
 let liveLineupIds = fs.existsSync(liveEmbedFile)
   ? JSON.parse(fs.readFileSync(liveEmbedFile, "utf8"))
