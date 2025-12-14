@@ -27,6 +27,7 @@ import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuil
 import fs from "fs";
 import 'dotenv/config';
 import express from "express";
+import fetch from "node-fetch";
 
 // ========================
 // EXPRESS HEALTH CHECK
@@ -53,7 +54,7 @@ const seriesConfigs = {
       "Mercedes-AMG PETRONAS F1 team": "1432661710849703998", 
       "Oracle Red Bull Racing F1 team": "1432661838146834525",
       "Scuderia Ferrari F1 team": "1432662095182172241", 
-      "MoneyGram Haas F1 team": "1432662285444190279", 
+      "MoneyGram Haas F1 team": "1432662285444190279",
       "Williams Racing F1 team": "1432662869245296641",
       "BWT Alpine F1 team": "1432663841346555984", 
       "Visa Cash App Racing Bulls F1 team": "1432664100848144447", 
@@ -138,7 +139,7 @@ const isCarNumberTaken = (series, number, userId) => {
 };
 
 // ========================
-// LIVE LINEUP UPDATER
+// LIVE LINEUP UPDATER (NEW EMBED EVERY TIME)
 // ========================
 const updateLiveLineup = async (guild, series) => {
   const config = seriesConfigs[series];
@@ -157,13 +158,7 @@ const updateLiveLineup = async (guild, series) => {
   const channel = guild.channels.cache.get(config.liveLineupChannelId);
   if (!channel?.isTextBased()) return;
 
-  if (liveLineupIds[series]) {
-    try {
-      const msg = await channel.messages.fetch(liveLineupIds[series]);
-      if (msg) return await msg.edit({ embeds: [embed] });
-    } catch {}
-  }
-
+  // Always send a new embed
   const msg = await channel.send({ embeds: [embed] });
   liveLineupIds[series] = msg.id;
   saveLiveEmbedIds();
@@ -231,7 +226,6 @@ const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
-  // ✅ START CRONITOR HEARTBEAT
   startCronitorHeartbeat();
 
   try {
