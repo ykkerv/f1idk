@@ -1,15 +1,16 @@
 // ========================
-// CRONITOR HEARTBEAT
+// IMPORTS
 // ========================
 import 'dotenv/config';
 import express from "express";
 import fetch from "node-fetch";
 import fs from "fs";
+import path from "path";
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 
-// ------------------------
-// Cronitor
-// ------------------------
+// ========================
+// CRONITOR HEARTBEAT
+// ========================
 const CRONITOR_URL = "https://cronitor.link/p/5228af7c42f54ba681f4b7c436c08f1b/luqCyv";
 let heartbeatStarted = false;
 function startCronitorHeartbeat() {
@@ -36,14 +37,16 @@ app.listen(PORT, () => console.log(`Health check server running on port ${PORT}`
 // ========================
 // FILES & DATA
 // ========================
-const assignedFile = "./data/assignedPlayers.json";
-const registrationFile = "./data/registrationData.json";
-const liveEmbedFile = "./data/liveLineup.json";
+const dataDir = "./data";
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
 
-// Ensure files exist
+const assignedFile = path.join(dataDir, "assignedPlayers.json");
+const registrationFile = path.join(dataDir, "registrationData.json");
+const liveEmbedFile = path.join(dataDir, "liveLineup.json");
+
 if (!fs.existsSync(assignedFile)) fs.writeFileSync(assignedFile, JSON.stringify({}, null, 2));
 if (!fs.existsSync(registrationFile)) fs.writeFileSync(registrationFile, JSON.stringify({}, null, 2));
-if (!fs.existsSync(liveEmbedFile)) fs.writeFileSync(liveEmbedFile, JSON.stringify({ F1:null, F2:null }, null, 2));
+if (!fs.existsSync(liveEmbedFile)) fs.writeFileSync(liveEmbedFile, JSON.stringify({ F1: null, F2: null }, null, 2));
 
 let assignedPlayers = JSON.parse(fs.readFileSync(assignedFile, "utf8"));
 let registrationData = JSON.parse(fs.readFileSync(registrationFile, "utf8"));
@@ -137,37 +140,33 @@ const isCarNumberTaken = (series, number, userId) => {
 // LIVE LINEUP
 // ========================
 const updateLiveLineup = async (guild, series) => {
-  const config = seriesConfigs[series];
-  const embed = new EmbedBuilder().setTitle(`${series} Live Team Lineup`).setColor("Gold").setTimestamp();
-
-  for (const team in config.teamRoleIds) {
-    let list = "";
-    for (const key in assignedPlayers) {
-      if (!key.startsWith(`${series}_`)) continue;
-      const uid = key.split("_")[1];
-      if (assignedPlayers[key].team === team)
-        list += `<@${uid}> - ${assignedPlayers[key].role}\n`;
-    }
-    if (!list) list = "No members yet.";
-    embed.addFields({ name: team, value: list });
-  }
-
-  const channel = guild.channels.cache.get(config.liveLineupChannelId);
-  if (!channel?.isTextBased()) return;
-
   try {
-    if (liveLineupIds[series]) {
-      const msg = await channel.messages.fetch(liveLineupIds[series]);
-      await msg.edit({ embeds: [embed] });
-    } else {
-      const msg = await channel.send({ embeds: [embed] });
-      liveLineupIds[series] = msg.id;
-      saveLiveEmbedIds();
+    const config = seriesConfigs[series];
+    const embed = new EmbedBuilder().setTitle(`${series} Live Team Lineup`).setColor("Gold").setTimestamp();
+
+    for (const team in config.teamRoleIds) {
+      let list = "";
+      for (const key in assignedPlayers) {
+        if (!key.startsWith(`${series}_`)) continue;
+        const uid = key.split("_")[1];
+        if (assignedPlayers[key].team === team) list += `<@${uid}> - ${assignedPlayers[key].role}\n`;
+      }
+      if (!list) list = "No members yet.";
+      embed.addFields({ name: team, value: list });
     }
-  } catch {
+
+    const channel = guild.channels.cache.get(config.liveLineupChannelId);
+    if (!channel?.isTextBased()) return;
+
+    if (liveLineupIds[series]) {
+      const msg = await channel.messages.fetch(liveLineupIds[series]).catch(() => null);
+      if (msg) return msg.edit({ embeds: [embed] });
+    }
     const msg = await channel.send({ embeds: [embed] });
     liveLineupIds[series] = msg.id;
     saveLiveEmbedIds();
+  } catch (err) {
+    console.error(`Failed to update ${series} live lineup:`, err);
   }
 };
 
@@ -263,7 +262,7 @@ client.on("interactionCreate", async interaction => {
 // ========================
 // COMMAND HANDLER
 // ========================
-client.on("interactionCreate", async (interaction) => {
+client.on("interactionCreate", async interaction => {
   if (!interaction.isCommand()) return;
   const { commandName, options, user, guild } = interaction;
   const league = options.getString("league");
@@ -273,7 +272,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "Invalid league.", ephemeral: true });
   }
 
-  // -------------------- HELP --------------------
+  // -------- HELP --------
   if (commandName === "help") {
     return interaction.reply({
       content: `**Commands**
@@ -289,7 +288,7 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // -------------------- RESET DATA --------------------
+  // -------- RESET DATA --------
   if (commandName === "resetdata") {
     if (user.id !== "902878740659441674") return interaction.reply({ content: "Not authorized.", ephemeral: true });
     assignedPlayers = {};
@@ -299,7 +298,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "✅ All bot data reset!", ephemeral: true });
   }
 
-  // -------------------- REGISTER --------------------
+  // -------- REGISTER --------
   if (commandName === "register") {
     const carNumber = options.getInteger("carnumber");
     const username = options.getString("username");
@@ -320,7 +319,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: `Registered as ${carNumber} | ${username} ${flag} in ${league}`, ephemeral: true });
   }
 
-  // -------------------- PROFILE --------------------
+  // -------- PROFILE --------
   if (commandName === "profile") {
     const target = options.getUser("user") || user;
     const reg = registrationData[target.id];
@@ -345,7 +344,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ embeds: [embed], ephemeral: false });
   }
 
-  // -------------------- SIGN --------------------
+  // -------- SIGN --------
   if (commandName === "sign") {
     const target = options.getUser("user");
     const team = options.getString("team");
@@ -374,66 +373,61 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: `✅ <@${target.id}> signed as ${role} in ${team} (${league})`, ephemeral: true });
   }
 
-  // -------------------- MOVE --------------------
+  // -------- MOVE --------
   if (commandName === "move") {
     const target = options.getUser("user");
     const team = options.getString("team");
     const role = options.getString("role");
 
-    if (!assignedPlayers[`${league}_${target.id}`]) {
-      return interaction.reply({ content: `${target.tag} is not signed in ${league}.`, ephemeral: true });
-    }
+    if (!assignedPlayers[`${league}_${target.id}`]) return interaction.reply({ content: "User not signed.", ephemeral: true });
+    assignedPlayers[`${league}_${target.id}`] = { team, role };
+    saveAssigned();
 
-    if (countRoleInTeam(league, team, role) >= config.playerRoles[role].max) {
-      return interaction.reply({ content: `${role} limit reached for ${team}`, ephemeral: true });
-    }
-
-    const old = assignedPlayers[`${league}_${target.id}`];
     try {
       const member = await guild.members.fetch(target.id);
       if (member) {
-        if (config.teamRoleIds[old.team]) member.roles.remove(config.teamRoleIds[old.team]).catch(() => {});
-        if (config.playerRoles[old.role]) member.roles.remove(config.playerRoles[old.role].id).catch(() => {});
+        // Remove old roles
+        Object.values(config.teamRoleIds).forEach(rid => member.roles.remove(rid).catch(()=>{}));
+        Object.values(config.playerRoles).forEach(r => member.roles.remove(r.id).catch(()=>{}));
+
+        // Add new roles
         await member.roles.add(config.teamRoleIds[team]);
         await member.roles.add(config.playerRoles[role].id);
       }
     } catch {}
 
-    assignedPlayers[`${league}_${target.id}`] = { team, role };
-    saveAssigned();
     await updateLiveLineup(guild, league);
     sendEmbed(guild, "Move", `<@${target.id}> moved to **${role}** in <@&${config.teamRoleIds[team]}>`, "Orange", `<@${user.id}>`, config.updateChannelId);
 
     return interaction.reply({ content: `✅ <@${target.id}> moved to ${role} in ${team} (${league})`, ephemeral: true });
   }
 
-  // -------------------- RELEASE --------------------
+  // -------- RELEASE --------
   if (commandName === "release") {
     const target = options.getUser("user");
-    if (!assignedPlayers[`${league}_${target.id}`]) {
-      return interaction.reply({ content: `${target.tag} is not signed in ${league}.`, ephemeral: true });
-    }
+    if (!assignedPlayers[`${league}_${target.id}`]) return interaction.reply({ content: "User not signed.", ephemeral: true });
 
     const old = assignedPlayers[`${league}_${target.id}`];
+    delete assignedPlayers[`${league}_${target.id}`];
+    saveAssigned();
+
     try {
       const member = await guild.members.fetch(target.id);
       if (member) {
-        if (config.teamRoleIds[old.team]) member.roles.remove(config.teamRoleIds[old.team]).catch(() => {});
-        if (config.playerRoles[old.role]) member.roles.remove(config.playerRoles[old.role].id).catch(() => {});
+        Object.values(config.teamRoleIds).forEach(rid => member.roles.remove(rid).catch(()=>{}));
+        Object.values(config.playerRoles).forEach(r => member.roles.remove(r.id).catch(()=>{}));
       }
     } catch {}
 
-    delete assignedPlayers[`${league}_${target.id}`];
-    saveAssigned();
     await updateLiveLineup(guild, league);
-    sendEmbed(guild, "Release", `<@${target.id}> released from <@&${config.teamRoleIds[old.team]}>`, "Red", `<@${user.id}>`, config.updateChannelId);
+    sendEmbed(guild, "Release", `<@${target.id}> released from **${old.role}** in <@&${config.teamRoleIds[old.team]}>`, "Red", `<@${user.id}>`, config.updateChannelId);
 
-    return interaction.reply({ content: `✅ <@${target.id}> has been released from ${league}`, ephemeral: true });
+    return interaction.reply({ content: `✅ <@${target.id}> released from ${old.role} in ${old.team} (${league})`, ephemeral: true });
   }
 
-  // -------------------- LINEUP YEAR --------------------
+  // -------- LINEUPYEAR --------
   if (commandName === "lineupyear") {
     await updateLiveLineup(guild, league);
-    return interaction.reply({ content: `✅ ${league} live lineup updated.`, ephemeral: true });
+    return interaction.reply({ content: `✅ Updated live lineup for ${league}`, ephemeral: true });
   }
 });
