@@ -97,14 +97,15 @@ const seriesConfigs = {
 // ========================
 // FILE PATHS
 // ========================
-const assignedFile = "./data/assignedPlayers.json";
+const assignedF1 = JSON.parse(fs.readFileSync("./data/assignedPlayersF1.json", "utf8"));
+const assignedF2 = JSON.parse(fs.readFileSync("./data/assignedPlayersF2.json", "utf8"));
+let assignedPlayers = { ...assignedF1, ...assignedF2 };
 const registrationFile = "./data/registrationData.json";
 const liveEmbedFile = "./data/liveLineup.json";
 
 // ========================
 // LOAD OR INITIALIZE DATA
 // ========================
-let assignedPlayers = fs.existsSync(assignedFile) ? JSON.parse(fs.readFileSync(assignedFile, "utf8")) : {};
 let registrationData = fs.existsSync(registrationFile) ? JSON.parse(fs.readFileSync(registrationFile, "utf8")) : {};
 let liveLineupIds = fs.existsSync(liveEmbedFile) ? JSON.parse(fs.readFileSync(liveEmbedFile, "utf8")) : { F1: null, F2: null };
 
