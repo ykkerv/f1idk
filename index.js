@@ -17,7 +17,7 @@ function startCronitorHeartbeat() {
     } catch (err) {
       console.error("Cronitor heartbeat failed", err);
     }
-  }, 5 * 1000); // every 1 minute
+  }, 60 * 1000); // every 1 minute
 }
 
 // ========================
@@ -34,9 +34,7 @@ import fetch from "node-fetch";
 // ========================
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 app.get("/", (req, res) => res.send("Bot is alive!"));
-
 app.listen(PORT, () => console.log(`Health check server running on port ${PORT}`));
 
 // ========================
@@ -97,10 +95,6 @@ const seriesConfigs = {
 };
 
 // ========================
-// DATA FILES
-// ========================
-
-// ========================
 // FILE PATHS
 // ========================
 const assignedFile = "./data/assignedPlayers.json";
@@ -110,31 +104,13 @@ const liveEmbedFile = "./data/liveLineup.json";
 // ========================
 // LOAD OR INITIALIZE DATA
 // ========================
+let assignedPlayers = fs.existsSync(assignedFile) ? JSON.parse(fs.readFileSync(assignedFile, "utf8")) : {};
+let registrationData = fs.existsSync(registrationFile) ? JSON.parse(fs.readFileSync(registrationFile, "utf8")) : {};
+let liveLineupIds = fs.existsSync(liveEmbedFile) ? JSON.parse(fs.readFileSync(liveEmbedFile, "utf8")) : { F1: null, F2: null };
 
-// assignedPlayers
-let assignedPlayers = {};
-if (fs.existsSync(assignedFile)) {
-  assignedPlayers = JSON.parse(fs.readFileSync(assignedFile, "utf8"));
-} else {
-  fs.writeFileSync(assignedFile, JSON.stringify({}, null, 2));
-}
-
-// registrationData
-let registrationData = {};
-if (fs.existsSync(registrationFile)) {
-  registrationData = JSON.parse(fs.readFileSync(registrationFile, "utf8"));
-} else {
-  fs.writeFileSync(registrationFile, JSON.stringify({}, null, 2));
-}
-
-// liveLineupIds
-let liveLineupIds = {};
-if (fs.existsSync(liveEmbedFile)) {
-  liveLineupIds = JSON.parse(fs.readFileSync(liveEmbedFile, "utf8"));
-} else {
-  liveLineupIds = { F1: null, F2: null };
-  fs.writeFileSync(liveEmbedFile, JSON.stringify(liveLineupIds, null, 2));
-}
+if (!fs.existsSync(assignedFile)) fs.writeFileSync(assignedFile, JSON.stringify({}, null, 2));
+if (!fs.existsSync(registrationFile)) fs.writeFileSync(registrationFile, JSON.stringify({}, null, 2));
+if (!fs.existsSync(liveEmbedFile)) fs.writeFileSync(liveEmbedFile, JSON.stringify({ F1:null, F2:null }, null, 2));
 
 // ========================
 // SAVE HELPERS
@@ -142,6 +118,7 @@ if (fs.existsSync(liveEmbedFile)) {
 const saveAssigned = () => fs.writeFileSync(assignedFile, JSON.stringify(assignedPlayers, null, 2));
 const saveRegistration = () => fs.writeFileSync(registrationFile, JSON.stringify(registrationData, null, 2));
 const saveLiveEmbedIds = () => fs.writeFileSync(liveEmbedFile, JSON.stringify(liveLineupIds, null, 2));
+
 // ========================
 // HELPER FUNCTIONS
 // ========================
@@ -158,7 +135,9 @@ const sendEmbed = async (guild, title, description, color, executorTag, updateCh
 };
 
 const countRoleInTeam = (series, team, role) => {
-  return Object.values(assignedPlayers).filter(p => p.series === series && p.team === team && p.role === role).length;
+  return Object.entries(assignedPlayers)
+    .filter(([key, val]) => key.startsWith(`${series}_`) && val.team === team && val.role === role)
+    .length;
 };
 
 const isCarNumberTaken = (series, number, userId) => {
@@ -166,7 +145,7 @@ const isCarNumberTaken = (series, number, userId) => {
 };
 
 // ========================
-// LIVE LINEUP UPDATER (NEW EMBED EVERY TIME)
+// LIVE LINEUP UPDATER
 // ========================
 const updateLiveLineup = async (guild, series) => {
   const config = seriesConfigs[series];
@@ -174,9 +153,11 @@ const updateLiveLineup = async (guild, series) => {
 
   for (const team in config.teamRoleIds) {
     let list = "";
-    for (const uid in assignedPlayers) {
-      if (assignedPlayers[uid].series === series && assignedPlayers[uid].team === team)
-        list += `<@${uid}> - ${assignedPlayers[uid].role}\n`;
+    for (const key in assignedPlayers) {
+      if (!key.startsWith(`${series}_`)) continue;
+      const uid = key.split("_")[1];
+      if (assignedPlayers[key].team === team)
+        list += `<@${uid}> - ${assignedPlayers[key].role}\n`;
     }
     if (!list) list = "No members yet.";
     embed.addFields({ name: team, value: list });
@@ -185,7 +166,6 @@ const updateLiveLineup = async (guild, series) => {
   const channel = guild.channels.cache.get(config.liveLineupChannelId);
   if (!channel?.isTextBased()) return;
 
-  // Always send a new embed
   const msg = await channel.send({ embeds: [embed] });
   liveLineupIds[series] = msg.id;
   saveLiveEmbedIds();
@@ -194,10 +174,7 @@ const updateLiveLineup = async (guild, series) => {
 // ========================
 // COMMANDS
 // ========================
-const seriesChoices = [
-  { name: "F1", value: "F1" },
-  { name: "F2", value: "F2" }
-];
+const seriesChoices = [{ name: "F1", value: "F1" }, { name: "F2", value: "F2" }];
 
 const commands = [
   new SlashCommandBuilder()
@@ -206,14 +183,14 @@ const commands = [
     .addUserOption(o => o.setName("user").setDescription("User to sign").setRequired(true))
     .addStringOption(o => o.setName("team").setDescription("Team").setRequired(true).setAutocomplete(true))
     .addStringOption(o => o.setName("role").setDescription("Role").setRequired(true).setAutocomplete(true)),
-
+  
   new SlashCommandBuilder()
     .setName("move").setDescription("Move a user to a new team and role")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addUserOption(o => o.setName("user").setDescription("User to move").setRequired(true))
     .addStringOption(o => o.setName("team").setDescription("Team").setRequired(true).setAutocomplete(true))
     .addStringOption(o => o.setName("role").setDescription("Role").setRequired(true).setAutocomplete(true)),
-
+  
   new SlashCommandBuilder()
     .setName("release").setDescription("Release a user from all bot-assigned roles")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
@@ -252,23 +229,17 @@ const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 // ========================
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user.tag}`);
-
   startCronitorHeartbeat();
 
   try {
-    await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
-      { body: commands }
-    );
+    await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
     console.log("Commands registered!");
 
     client.guilds.cache.forEach(guild => {
       updateLiveLineup(guild, "F1");
       updateLiveLineup(guild, "F2");
     });
-  } catch (err) {
-    console.error(err);
-  }
+  } catch (err) { console.error(err); }
 });
 
 // ========================
@@ -280,23 +251,22 @@ client.login(process.env.DISCORD_TOKEN);
 // AUTOCOMPLETE HANDLER
 // ========================
 client.on("interactionCreate", async interaction => {
-  if (interaction.isAutocomplete()) {
-    const focused = interaction.options.getFocused(true);
-    const league = interaction.options.getString("league");
-    const config = league ? seriesConfigs[league] : null;
-    if (!config) return interaction.respond([]);
+  if (!interaction.isAutocomplete()) return;
+  const focused = interaction.options.getFocused(true);
+  const league = interaction.options.getString("league");
+  const config = league ? seriesConfigs[league] : null;
+  if (!config) return interaction.respond([]);
 
-    if (focused.name === "team") {
-      const choices = Object.keys(config.teamRoleIds);
-      const filtered = choices.filter(c => c.toLowerCase().startsWith(focused.value.toLowerCase()));
-      return interaction.respond(filtered.map(c => ({ name: c, value: c })));
-    }
+  if (focused.name === "team") {
+    const choices = Object.keys(config.teamRoleIds);
+    const filtered = choices.filter(c => c.toLowerCase().startsWith(focused.value.toLowerCase()));
+    return interaction.respond(filtered.map(c => ({ name: c, value: c })));
+  }
 
-    if (focused.name === "role") {
-      const choices = Object.keys(config.playerRoles);
-      const filtered = choices.filter(c => c.toLowerCase().startsWith(focused.value.toLowerCase()));
-      return interaction.respond(filtered.map(c => ({ name: c, value: c })));
-    }
+  if (focused.name === "role") {
+    const choices = Object.keys(config.playerRoles);
+    const filtered = choices.filter(c => c.toLowerCase().startsWith(focused.value.toLowerCase()));
+    return interaction.respond(filtered.map(c => ({ name: c, value: c })));
   }
 });
 
@@ -336,7 +306,7 @@ client.on("interactionCreate", async (interaction) => {
     if (user.id !== "902878740659441674") return interaction.reply({ content: "Not authorized.", ephemeral: true });
     assignedPlayers = {};
     registrationData = {};
-    liveLineupIds = { F1: null, F2: null };
+    liveLineupIds = { F1:null, F2:null };
     saveAssigned(); saveRegistration(); saveLiveEmbedIds();
     return interaction.reply({ content: "✅ All bot data reset!", ephemeral: true });
   }
@@ -366,7 +336,7 @@ client.on("interactionCreate", async (interaction) => {
   if (commandName === "profile") {
     const target = options.getUser("user") || user;
     const reg = registrationData[target.id];
-    const assigned = assignedPlayers[target.id];
+    const assigned = assignedPlayers[`${league}_${target.id}`];
     const embed = new EmbedBuilder().setTitle(`${target.tag} Profile`).setColor("Blue");
 
     if (reg && reg.series === league) {
@@ -377,14 +347,14 @@ client.on("interactionCreate", async (interaction) => {
       );
     } else { embed.addFields({ name: "Registration", value: "Not registered" }); }
 
-    if (assigned && assigned.series === league) {
+    if (assigned) {
       embed.addFields(
-        { name: "Team", value: assigned.team, inline: true },
+        { name: "Team", value: `<@&${config.teamRoleIds[assigned.team]}>`, inline: true },
         { name: "Role", value: assigned.role, inline: true }
       );
     } else { embed.addFields({ name: "Team Info", value: "Not signed" }); }
 
-    return interaction.reply({ embeds: [embed], ephemeral: true });
+    return interaction.reply({ embeds: [embed], ephemeral: false });
   }
 
   // SIGN
@@ -399,19 +369,28 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: `${role} limit reached for ${team}`, ephemeral: true });
     }
 
-    assignedPlayers[target.id] = { series: league, team, role };
+    assignedPlayers[`${league}_${target.id}`] = { team, role };
     saveAssigned();
 
     try {
       const member = await guild.members.fetch(target.id);
-      await member.roles.add(config.teamRoleIds[team]);
-      await member.roles.add(config.playerRoles[role].id);
+      if (member) {
+        await member.roles.add(config.teamRoleIds[team]);
+        await member.roles.add(config.playerRoles[role].id);
+      }
     } catch {}
 
     updateLiveLineup(guild, league);
-    sendEmbed(guild, "Sign", `${target.tag} signed as ${role} in ${team}`, "Green", user.tag, config.updateChannelId);
+    sendEmbed(
+      guild,
+      "Sign",
+      `<@${target.id}> signed as **${role}** in <@&${config.teamRoleIds[team]}>`,
+      "Green",
+      `<@${user.id}>`,
+      config.updateChannelId
+    );
 
-    return interaction.reply({ content: `✅ ${target.tag} signed as ${role} in ${team} (${league})`, ephemeral: true });
+    return interaction.reply({ content: `✅ <@${target.id}> signed as ${role} in ${team} (${league})`, ephemeral: true });
   }
 
   // MOVE
@@ -420,7 +399,7 @@ client.on("interactionCreate", async (interaction) => {
     const team = options.getString("team");
     const role = options.getString("role");
 
-    if (!assignedPlayers[target.id] || assignedPlayers[target.id].series !== league) {
+    if (!assignedPlayers[`${league}_${target.id}`]) {
       return interaction.reply({ content: `${target.tag} is not signed in ${league}.`, ephemeral: true });
     }
 
@@ -428,7 +407,7 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: `${role} limit reached for ${team}`, ephemeral: true });
     }
 
-    const old = assignedPlayers[target.id];
+    const old = assignedPlayers[`${league}_${target.id}`];
     try {
       const member = await guild.members.fetch(target.id);
       if (member) {
@@ -439,22 +418,29 @@ client.on("interactionCreate", async (interaction) => {
       }
     } catch {}
 
-    assignedPlayers[target.id] = { series: league, team, role };
+    assignedPlayers[`${league}_${target.id}`] = { team, role };
     saveAssigned();
     updateLiveLineup(guild, league);
-    sendEmbed(guild, "Move", `${target.tag} moved to ${role} in ${team}`, "Orange", user.tag, config.updateChannelId);
+    sendEmbed(
+      guild,
+      "Move",
+      `<@${target.id}> moved to **${role}** in <@&${config.teamRoleIds[team]}>`,
+      "Orange",
+      `<@${user.id}>`,
+      config.updateChannelId
+    );
 
-    return interaction.reply({ content: `✅ ${target.tag} moved to ${role} in ${team} (${league})`, ephemeral: true });
+    return interaction.reply({ content: `✅ <@${target.id}> moved to ${role} in ${team} (${league})`, ephemeral: true });
   }
 
   // RELEASE
   if (commandName === "release") {
     const target = options.getUser("user");
-    if (!assignedPlayers[target.id] || assignedPlayers[target.id].series !== league) {
+    if (!assignedPlayers[`${league}_${target.id}`]) {
       return interaction.reply({ content: `${target.tag} is not signed in ${league}.`, ephemeral: true });
     }
 
-    const old = assignedPlayers[target.id];
+    const old = assignedPlayers[`${league}_${target.id}`];
     try {
       const member = await guild.members.fetch(target.id);
       if (member) {
@@ -463,12 +449,19 @@ client.on("interactionCreate", async (interaction) => {
       }
     } catch {}
 
-    delete assignedPlayers[target.id];
+    delete assignedPlayers[`${league}_${target.id}`];
     saveAssigned();
     updateLiveLineup(guild, league);
-    sendEmbed(guild, "Release", `${target.tag} released from ${old.team}`, "Red", user.tag, config.updateChannelId);
+    sendEmbed(
+      guild,
+      "Release",
+      `<@${target.id}> released from <@&${config.teamRoleIds[old.team]}>`,
+      "Red",
+      `<@${user.id}>`,
+      config.updateChannelId
+    );
 
-    return interaction.reply({ content: `✅ ${target.tag} has been released from ${league}`, ephemeral: true });
+    return interaction.reply({ content: `✅ <@${target.id}> has been released from ${league}`, ephemeral: true });
   }
 
   // LINEUP YEAR
