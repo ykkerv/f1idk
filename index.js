@@ -1,15 +1,20 @@
 // ========================
 // CRONITOR HEARTBEAT
 // ========================
-const CRONITOR_URL =
-  "https://cronitor.link/p/5228af7c42f54ba681f4b7c436c08f1b/luqCyv";
+import 'dotenv/config';
+import express from "express";
+import fetch from "node-fetch";
+import fs from "fs";
+import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 
+// ------------------------
+// Cronitor
+// ------------------------
+const CRONITOR_URL = "https://cronitor.link/p/5228af7c42f54ba681f4b7c436c08f1b/luqCyv";
 let heartbeatStarted = false;
-
 function startCronitorHeartbeat() {
   if (heartbeatStarted) return;
   heartbeatStarted = true;
-
   setInterval(async () => {
     try {
       await fetch(CRONITOR_URL);
@@ -17,17 +22,8 @@ function startCronitorHeartbeat() {
     } catch (err) {
       console.error("Cronitor heartbeat failed", err);
     }
-  }, 60 * 1000); // every 1 minute
+  }, 60 * 1000);
 }
-
-// ========================
-// IMPORTS
-// ========================
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
-import fs from "fs";
-import 'dotenv/config';
-import express from "express";
-import fetch from "node-fetch";
 
 // ========================
 // EXPRESS HEALTH CHECK
@@ -38,12 +34,23 @@ app.get("/", (req, res) => res.send("Bot is alive!"));
 app.listen(PORT, () => console.log(`Health check server running on port ${PORT}`));
 
 // ========================
-// DISCORD CLIENT
+// FILES & DATA
 // ========================
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
+const assignedFile = "./data/assignedPlayers.json";
+const registrationFile = "./data/registrationData.json";
+const liveEmbedFile = "./data/liveLineup.json";
+
+// Ensure files exist
+if (!fs.existsSync(assignedFile)) fs.writeFileSync(assignedFile, JSON.stringify({}, null, 2));
+if (!fs.existsSync(registrationFile)) fs.writeFileSync(registrationFile, JSON.stringify({}, null, 2));
+if (!fs.existsSync(liveEmbedFile)) fs.writeFileSync(liveEmbedFile, JSON.stringify({ F1:null, F2:null }, null, 2));
+
+let assignedPlayers = JSON.parse(fs.readFileSync(assignedFile, "utf8"));
+let registrationData = JSON.parse(fs.readFileSync(registrationFile, "utf8"));
+let liveLineupIds = JSON.parse(fs.readFileSync(liveEmbedFile, "utf8"));
 
 // ========================
-// CONFIG FOR F1/F2
+// F1/F2 CONFIG
 // ========================
 const seriesConfigs = {
   F1: {
@@ -95,25 +102,6 @@ const seriesConfigs = {
 };
 
 // ========================
-// FILE PATHS
-// ========================
-const assignedF1 = JSON.parse(fs.readFileSync("./data/assignedPlayersF1.json", "utf8"));
-const assignedF2 = JSON.parse(fs.readFileSync("./data/assignedPlayersF2.json", "utf8"));
-let assignedPlayers = { ...assignedF1, ...assignedF2 };
-const registrationFile = "./data/registrationData.json";
-const liveEmbedFile = "./data/liveLineup.json";
-
-// ========================
-// LOAD OR INITIALIZE DATA
-// ========================
-let registrationData = fs.existsSync(registrationFile) ? JSON.parse(fs.readFileSync(registrationFile, "utf8")) : {};
-let liveLineupIds = fs.existsSync(liveEmbedFile) ? JSON.parse(fs.readFileSync(liveEmbedFile, "utf8")) : { F1: null, F2: null };
-
-if (!fs.existsSync(assignedFile)) fs.writeFileSync(assignedFile, JSON.stringify({}, null, 2));
-if (!fs.existsSync(registrationFile)) fs.writeFileSync(registrationFile, JSON.stringify({}, null, 2));
-if (!fs.existsSync(liveEmbedFile)) fs.writeFileSync(liveEmbedFile, JSON.stringify({ F1:null, F2:null }, null, 2));
-
-// ========================
 // SAVE HELPERS
 // ========================
 const saveAssigned = () => fs.writeFileSync(assignedFile, JSON.stringify(assignedPlayers, null, 2));
@@ -121,7 +109,7 @@ const saveRegistration = () => fs.writeFileSync(registrationFile, JSON.stringify
 const saveLiveEmbedIds = () => fs.writeFileSync(liveEmbedFile, JSON.stringify(liveLineupIds, null, 2));
 
 // ========================
-// HELPER FUNCTIONS
+// HELPERS
 // ========================
 const sendEmbed = async (guild, title, description, color, executorTag, updateChannelId) => {
   const embed = new EmbedBuilder()
@@ -146,7 +134,7 @@ const isCarNumberTaken = (series, number, userId) => {
 };
 
 // ========================
-// LIVE LINEUP UPDATER
+// LIVE LINEUP
 // ========================
 const updateLiveLineup = async (guild, series) => {
   const config = seriesConfigs[series];
@@ -167,62 +155,65 @@ const updateLiveLineup = async (guild, series) => {
   const channel = guild.channels.cache.get(config.liveLineupChannelId);
   if (!channel?.isTextBased()) return;
 
-  const msg = await channel.send({ embeds: [embed] });
-  liveLineupIds[series] = msg.id;
-  saveLiveEmbedIds();
+  try {
+    if (liveLineupIds[series]) {
+      const msg = await channel.messages.fetch(liveLineupIds[series]);
+      await msg.edit({ embeds: [embed] });
+    } else {
+      const msg = await channel.send({ embeds: [embed] });
+      liveLineupIds[series] = msg.id;
+      saveLiveEmbedIds();
+    }
+  } catch {
+    const msg = await channel.send({ embeds: [embed] });
+    liveLineupIds[series] = msg.id;
+    saveLiveEmbedIds();
+  }
 };
 
 // ========================
 // COMMANDS
 // ========================
 const seriesChoices = [{ name: "F1", value: "F1" }, { name: "F2", value: "F2" }];
-
 const commands = [
-  new SlashCommandBuilder()
-    .setName("sign").setDescription("Sign a user to a league team and role")
+  new SlashCommandBuilder().setName("sign").setDescription("Sign a user to a league team and role")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addUserOption(o => o.setName("user").setDescription("User to sign").setRequired(true))
     .addStringOption(o => o.setName("team").setDescription("Team").setRequired(true).setAutocomplete(true))
     .addStringOption(o => o.setName("role").setDescription("Role").setRequired(true).setAutocomplete(true)),
-  
-  new SlashCommandBuilder()
-    .setName("move").setDescription("Move a user to a new team and role")
+
+  new SlashCommandBuilder().setName("move").setDescription("Move a user to a new team and role")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addUserOption(o => o.setName("user").setDescription("User to move").setRequired(true))
     .addStringOption(o => o.setName("team").setDescription("Team").setRequired(true).setAutocomplete(true))
     .addStringOption(o => o.setName("role").setDescription("Role").setRequired(true).setAutocomplete(true)),
-  
-  new SlashCommandBuilder()
-    .setName("release").setDescription("Release a user from all bot-assigned roles")
+
+  new SlashCommandBuilder().setName("release").setDescription("Release a user from all bot-assigned roles")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addUserOption(o => o.setName("user").setDescription("User to release").setRequired(true)),
 
-  new SlashCommandBuilder()
-    .setName("register").setDescription("Register car number, username, flag")
+  new SlashCommandBuilder().setName("register").setDescription("Register car number, username, flag")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addIntegerOption(o => o.setName("carnumber").setDescription("Car number").setRequired(true))
     .addStringOption(o => o.setName("username").setDescription("Username").setRequired(true))
     .addStringOption(o => o.setName("flag").setDescription("Flag emoji").setRequired(false)),
 
-  new SlashCommandBuilder()
-    .setName("profile").setDescription("Show user profile")
+  new SlashCommandBuilder().setName("profile").setDescription("Show user profile")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addUserOption(o => o.setName("user").setDescription("User").setRequired(false)),
 
-  new SlashCommandBuilder()
-    .setName("lineupyear").setDescription("Show all teams lineup")
+  new SlashCommandBuilder().setName("lineupyear").setDescription("Show all teams lineup")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices)),
 
-  new SlashCommandBuilder()
-    .setName("help").setDescription("Show commands"),
+  new SlashCommandBuilder().setName("help").setDescription("Show commands"),
 
-  new SlashCommandBuilder()
-    .setName("resetdata").setDescription("Reset all bot data (admin only)")
+  new SlashCommandBuilder().setName("resetdata").setDescription("Reset all bot data (admin only)")
 ].map(c => c.toJSON());
 
 // ========================
-// REST CLIENT
+// DISCORD CLIENT
 // ========================
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
 const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 
 // ========================
@@ -243,9 +234,6 @@ client.once("ready", async () => {
   } catch (err) { console.error(err); }
 });
 
-// ========================
-// CLIENT LOGIN
-// ========================
 client.login(process.env.DISCORD_TOKEN);
 
 // ========================
@@ -253,6 +241,7 @@ client.login(process.env.DISCORD_TOKEN);
 // ========================
 client.on("interactionCreate", async interaction => {
   if (!interaction.isAutocomplete()) return;
+
   const focused = interaction.options.getFocused(true);
   const league = interaction.options.getString("league");
   const config = league ? seriesConfigs[league] : null;
@@ -272,7 +261,7 @@ client.on("interactionCreate", async interaction => {
 });
 
 // ========================
-// INTERACTION HANDLER
+// COMMAND HANDLER
 // ========================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
@@ -284,11 +273,10 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "Invalid league.", ephemeral: true });
   }
 
-  // HELP
+  // -------------------- HELP --------------------
   if (commandName === "help") {
     return interaction.reply({
-      content: `
-**Commands**
+      content: `**Commands**
 /sign - Sign a user to a team/role
 /move - Move a user to a new team/role
 /release - Remove a user from all bot roles
@@ -296,13 +284,12 @@ client.on("interactionCreate", async (interaction) => {
 /profile - Show user profile
 /lineupyear - Show all teams lineup
 /resetdata - Reset all bot data (admin only)
-/help - Show this message
-      `,
+/help - Show this message`,
       ephemeral: true
     });
   }
 
-  // RESET DATA
+  // -------------------- RESET DATA --------------------
   if (commandName === "resetdata") {
     if (user.id !== "902878740659441674") return interaction.reply({ content: "Not authorized.", ephemeral: true });
     assignedPlayers = {};
@@ -312,7 +299,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "✅ All bot data reset!", ephemeral: true });
   }
 
-  // REGISTER
+  // -------------------- REGISTER --------------------
   if (commandName === "register") {
     const carNumber = options.getInteger("carnumber");
     const username = options.getString("username");
@@ -333,7 +320,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: `Registered as ${carNumber} | ${username} ${flag} in ${league}`, ephemeral: true });
   }
 
-  // PROFILE
+  // -------------------- PROFILE --------------------
   if (commandName === "profile") {
     const target = options.getUser("user") || user;
     const reg = registrationData[target.id];
@@ -358,7 +345,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ embeds: [embed], ephemeral: false });
   }
 
-  // SIGN
+  // -------------------- SIGN --------------------
   if (commandName === "sign") {
     const target = options.getUser("user");
     const team = options.getString("team");
@@ -381,20 +368,13 @@ client.on("interactionCreate", async (interaction) => {
       }
     } catch {}
 
-    updateLiveLineup(guild, league);
-    sendEmbed(
-      guild,
-      "Sign",
-      `<@${target.id}> signed as **${role}** in <@&${config.teamRoleIds[team]}>`,
-      "Green",
-      `<@${user.id}>`,
-      config.updateChannelId
-    );
+    await updateLiveLineup(guild, league);
+    sendEmbed(guild, "Sign", `<@${target.id}> signed as **${role}** in <@&${config.teamRoleIds[team]}>`, "Green", `<@${user.id}>`, config.updateChannelId);
 
     return interaction.reply({ content: `✅ <@${target.id}> signed as ${role} in ${team} (${league})`, ephemeral: true });
   }
 
-  // MOVE
+  // -------------------- MOVE --------------------
   if (commandName === "move") {
     const target = options.getUser("user");
     const team = options.getString("team");
@@ -421,20 +401,13 @@ client.on("interactionCreate", async (interaction) => {
 
     assignedPlayers[`${league}_${target.id}`] = { team, role };
     saveAssigned();
-    updateLiveLineup(guild, league);
-    sendEmbed(
-      guild,
-      "Move",
-      `<@${target.id}> moved to **${role}** in <@&${config.teamRoleIds[team]}>`,
-      "Orange",
-      `<@${user.id}>`,
-      config.updateChannelId
-    );
+    await updateLiveLineup(guild, league);
+    sendEmbed(guild, "Move", `<@${target.id}> moved to **${role}** in <@&${config.teamRoleIds[team]}>`, "Orange", `<@${user.id}>`, config.updateChannelId);
 
     return interaction.reply({ content: `✅ <@${target.id}> moved to ${role} in ${team} (${league})`, ephemeral: true });
   }
 
-  // RELEASE
+  // -------------------- RELEASE --------------------
   if (commandName === "release") {
     const target = options.getUser("user");
     if (!assignedPlayers[`${league}_${target.id}`]) {
@@ -452,22 +425,15 @@ client.on("interactionCreate", async (interaction) => {
 
     delete assignedPlayers[`${league}_${target.id}`];
     saveAssigned();
-    updateLiveLineup(guild, league);
-    sendEmbed(
-      guild,
-      "Release",
-      `<@${target.id}> released from <@&${config.teamRoleIds[old.team]}>`,
-      "Red",
-      `<@${user.id}>`,
-      config.updateChannelId
-    );
+    await updateLiveLineup(guild, league);
+    sendEmbed(guild, "Release", `<@${target.id}> released from <@&${config.teamRoleIds[old.team]}>`, "Red", `<@${user.id}>`, config.updateChannelId);
 
     return interaction.reply({ content: `✅ <@${target.id}> has been released from ${league}`, ephemeral: true });
   }
 
-  // LINEUP YEAR
+  // -------------------- LINEUP YEAR --------------------
   if (commandName === "lineupyear") {
-    updateLiveLineup(guild, league);
+    await updateLiveLineup(guild, league);
     return interaction.reply({ content: `✅ ${league} live lineup updated.`, ephemeral: true });
   }
 });
