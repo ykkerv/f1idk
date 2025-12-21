@@ -182,27 +182,35 @@ const updateLiveLineup = async (guild, series) => {
 // ========================
 // UPDATE CAR NUMBER EMBED
 // ========================
-const updateCarNumberEmbed = async (guild, league) => {
+const updateCarNumberEmbed = async (guild) => {
   const channel = guild.channels.cache.get("1452244527749533726");
   if (!channel?.isTextBased()) return;
 
   const embed = new EmbedBuilder()
-    .setTitle(`${league} Claimed Car Numbers`)
+    .setTitle(`Claimed Car Numbers`)
     .setColor("Blue")
-    .setDescription(
-      carNumberClaims[league]?.length
-        ? carNumberClaims[league].map(c => `#${c.number} — <@${c.userId}>`).join("\n")
-        : "No claimed numbers yet."
-    );
+    .setTimestamp();
+
+  // F1 list
+  const f1List = carNumberClaims.F1?.length
+    ? carNumberClaims.F1.map(c => `#${c.number} — <@${c.userId}>`).join("\n")
+    : "No list yet";
+  embed.addFields({ name: "F1", value: f1List });
+
+  // F2 list
+  const f2List = carNumberClaims.F2?.length
+    ? carNumberClaims.F2.map(c => `#${c.number} — <@${c.userId}>`).join("\n")
+    : "No list yet";
+  embed.addFields({ name: "F2", value: f2List });
 
   try {
     if (!carNumberClaims.embeds) carNumberClaims.embeds = {};
-    if (carNumberClaims.embeds[league]) {
-      const msg = await channel.messages.fetch(carNumberClaims.embeds[league]).catch(() => null);
+    if (carNumberClaims.embeds.live) {
+      const msg = await channel.messages.fetch(carNumberClaims.embeds.live).catch(() => null);
       if (msg) return msg.edit({ embeds: [embed] });
     }
     const msg = await channel.send({ embeds: [embed] });
-    carNumberClaims.embeds[league] = msg.id;
+    carNumberClaims.embeds.live = msg.id;
     saveCarNumberClaims();
   } catch (err) {
     console.error("Failed to update car number embed:", err);
@@ -383,7 +391,7 @@ if (commandName === "carnumberclaim") {
   carNumberClaims[league].push({ number, userId: user.id });
   saveCarNumberClaims();
 
-  await updateCarNumberEmbed(guild, league);
+  await updateCarNumberEmbed(guild);
 
   return interaction.reply({ content: `✅ You have claimed car number ${number} in ${league}!`, ephemeral: true });
 }
