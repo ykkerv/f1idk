@@ -1,35 +1,34 @@
 {
-  "data": {
-    "1111913693907795970": { "series": "F2", "team": "McLaren F2 team", "role": "Reserve Driver F2" },
-    "1170790804554530828": { "series": "F2", "team": "McLaren F2 team", "role": "Main Driver F2" },
-    "1153396013009215591": { "series": "F2", "team": "McLaren F2 team", "role": "Team Principal F2" },
-    "940298559717249025": { "series": "F2", "team": "McLaren F2 team", "role": "Main Driver F2" },
+    "1111913693907795970": { "team": "McLaren F2 team", "role": "Reserve Driver F2" },
+    "1170790804554530828": { "team": "McLaren F2 team", "role": "Main Driver F2" },
+    "1153396013009215591": { "team": "McLaren F2 team", "role": "Team Principal F2" },
+    "940298559717249025": { "team": "McLaren F2 team", "role": "Main Driver F2" },
     
-    "1439601182786978005": { "series": "F2", "team": "Mercedes-AMG PETRONAS F2 team", "role": "Team Principal F2" },
-    "902878740659441674": { "series": "F2", "team": "Mercedes-AMG PETRONAS F2 team", "role": "Main Driver F2" },
-    "1040179360868597781": { "series": "F2", "team": "Mercedes-AMG PETRONAS F2 team", "role": "Main Driver F2" },
-    "1364145921977225307": { "series": "F2", "team": "Mercedes-AMG PETRONAS F2 team", "role": "Reserve Driver F2" },
+    "1439601182786978005": { "team": "Mercedes-AMG PETRONAS F2 team", "role": "Team Principal F2" },
+    "902878740659441674": { "team": "Mercedes-AMG PETRONAS F2 team", "role": "Main Driver F2" },
+    "1040179360868597781": { "team": "Mercedes-AMG PETRONAS F2 team", "role": "Main Driver F2" },
+    "1364145921977225307": { "team": "Mercedes-AMG PETRONAS F2 team", "role": "Reserve Driver F2" },
     
-    "1336279717778690138": { "series": "F2", "team": "Oracle Red Bull Racing F2 team", "role": "Team Principal F2" },
-    "1238085761727860766": { "series": "F2", "team": "Oracle Red Bull Racing F2 team", "role": "Main Driver F2" },
-    "1153255596867452938": { "series": "F2", "team": "Oracle Red Bull Racing F2 team", "role": "Main Driver F2" },
-    "917703934192275517": { "series": "F2", "team": "Oracle Red Bull Racing F2 team", "role": "Engineer F2" },
+    "1336279717778690138": { "team": "Oracle Red Bull Racing F2 team", "role": "Team Principal F2" },
+    "1238085761727860766": { "team": "Oracle Red Bull Racing F2 team", "role": "Main Driver F2" },
+    "1153255596867452938": { "team": "Oracle Red Bull Racing F2 team", "role": "Main Driver F2" },
+    "917703934192275517": { "team": "Oracle Red Bull Racing F2 team", "role": "Engineer F2" },
 
-    "794170362815971348": { "series": "F2", "team": "Scuderia Ferrari F2 team", "role": "Team Principal F2" },
-    "1232988113949822992": { "series": "F2", "team": "Scuderia Ferrari F2 team", "role": "Main Driver F2" },
-    "663160900877811738": { "series": "F2", "team": "Scuderia Ferrari F2 team", "role": "Main Driver F2" },
-    "1434220317789786215": { "series": "F2", "team": "Scuderia Ferrari F2 team", "role": "Reserve Driver F2" },
+    "794170362815971348": { "team": "Scuderia Ferrari F2 team", "role": "Team Principal F2" },
+    "1232988113949822992": { "team": "Scuderia Ferrari F2 team", "role": "Main Driver F2" },
+    "663160900877811738": { "team": "Scuderia Ferrari F2 team", "role": "Main Driver F2" },
+    "1434220317789786215": { "team": "Scuderia Ferrari F2 team", "role": "Reserve Driver F2" },
 
-    "518740889191841803": { "series": "F2", "team": "Visa Cash App Racing Bulls F2 team", "role": "Main Driver F2" },
+    "518740889191841803": { "team": "Visa Cash App Racing Bulls F2 team", "role": "Main Driver F2" },
 
-    "1186752653464707102": { "series": "F2", "team": "BWT Alpine F2 team", "role": "Main Driver F2" },
+    "1186752653464707102": { "team": "BWT Alpine F2 team", "role": "Main Driver F2" },
     
-    "1185826673854259200": { "series": "F2", "team": "Williams Racing F2 team", "role": "Main Driver F2" },
-    "1363291837581885573": { "series": "F2", "team": "Williams Racing F2 team", "role": "Main Driver F2" },
+    "1185826673854259200": { "team": "Williams Racing F2 team", "role": "Main Driver F2" },
+    "1363291837581885573": { "team": "Williams Racing F2 team", "role": "Main Driver F2" },
 
-    "1424046314492002367": { "series": "F2", "team": "Aston Martin Aramco F2 team", "role": "Team Principal F2" },
-    "737724257383219220": { "series": "F2", "team": "Aston Martin Aramco F2 team", "role": "Main Driver F2" },
-    "771932278079094816": { "series": "F2", "team": "Aston Martin Aramco F2 team", "role": "Main Driver F2" },
+    "1424046314492002367": { "team": "Aston Martin Aramco F2 team", "role": "Team Principal F2" },
+    "737724257383219220": { "team": "Aston Martin Aramco F2 team", "role": "Main Driver F2" },
+    "771932278079094816": { "team": "Aston Martin Aramco F2 team", "role": "Main Driver F2" },
     
-    "1190909698220761098": { "series": "F2", "team": "Stake F2 team Kick Sauber", "role": "Team Principal F2" }
+    "1190909698220761098": { "team": "Stake F2 team Kick Sauber", "role": "Team Principal F2" }
 }
