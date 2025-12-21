@@ -334,14 +334,34 @@ client.on("interactionCreate", async interaction => {
   }
 
   // REGISTER
-  if (commandName === "register") {
-    const carNumber = options.getInteger("carnumber");
-    const username = options.getString("username");
-    const flag = options.getString("flag");
-    if (isCarNumberTaken(league, carNumber, user.id)) return interaction.reply({ content: `Car number ${carNumber} is taken in ${league}!`, ephemeral: true });
-    registrationData[user.id] = { series: league, carnumber: carNumber, username, flag };
-    saveRegistration(); return interaction.reply({ content: `Registered car number ${carNumber} as ${username} ${flag} in ${league}!`, ephemeral: true });
+// -------------------- REGISTER --------------------
+if (commandName === "register") {
+  const carNumber = options.getInteger("carnumber");
+  const username = options.getString("username");
+  const flag = options.getString("flag");
+
+  if (isCarNumberTaken(league, carNumber, user.id)) {
+    return interaction.reply({ content: `Car number ${carNumber} is already taken in ${league}!`, ephemeral: true });
   }
+
+  // Save registration data
+  registrationData[user.id] = { series: league, carnumber: carNumber, username, flag };
+  saveRegistration();
+
+  // Rename user on Discord
+  try {
+    const member = await guild.members.fetch(user.id);
+    await member.setNickname(`${username} #${carNumber} ${flag}`);
+  } catch (err) {
+    console.error("Failed to rename user:", err);
+  }
+
+  return interaction.reply({
+    content: `You have successfully registered your car number ${carNumber} as ${username} ${flag} in ${league}!`,
+    ephemeral: true
+  });
+}
+
 
   // PROFILE
   if (commandName === "profile") {
