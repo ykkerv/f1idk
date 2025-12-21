@@ -156,16 +156,19 @@ const updateLiveLineup = async (guild, series) => {
   const MAX_FIELD_LENGTH = 1024;
   const safeString = (str) => (typeof str === "string" ? str : String(str));
 
+  const allFields = [];
+
   for (const team in config.teamRoleIds) {
     let list = "";
     for (const [key, val] of Object.entries(assignedPlayers)) {
       if (val.team === team) list += `<@${key}> - ${safeString(val.role)}\n`;
     }
     if (!list) list = "No members yet.";
-    // truncate
     list = list.slice(0, MAX_FIELD_LENGTH);
-    embed.addFields({ name: team, value: list });
+    allFields.push({ name: String(team), value: String(list) });
   }
+
+  if (allFields.length) embed.addFields(...allFields);
 
   const channel = guild.channels.cache.get(config.liveLineupChannelId);
   if (!channel?.isTextBased()) return;
@@ -195,7 +198,12 @@ const updateCarNumberEmbed = async (guild) => {
   const MAX_FIELD_LENGTH = 1024;
   const formatList = (list) => list.length ? list.map(c => `#${c.number} — <@${c.userId}>`).join("\n").slice(0, MAX_FIELD_LENGTH) : "No list yet";
 
-  embed.addFields({ name: "F1", value: formatList(carNumberClaims.F1) }, { name: "F2", value: formatList(carNumberClaims.F2) });
+  const allFields = [
+    { name: "F1", value: String(formatList(carNumberClaims.F1)) },
+    { name: "F2", value: String(formatList(carNumberClaims.F2)) }
+  ];
+
+  if (allFields.length) embed.addFields(...allFields);
 
   try {
     if (!carNumberClaims.embeds) carNumberClaims.embeds = {};
@@ -216,7 +224,7 @@ const updateBackupEmbed = async (guild) => {
   if (!channel?.isTextBased()) return;
 
   const embed = new EmbedBuilder()
-    .setTitle("WARL Backup Embed (PMO)")
+    .setTitle("WARL Backup System")
     .setColor("Purple")
     .setTimestamp();
 
@@ -235,22 +243,20 @@ const updateBackupEmbed = async (guild) => {
     const chunks = [];
     for (let i = 0; i < str.length; i += MAX_FIELD_LENGTH) {
       chunks.push({
-        name: i === 0 ? name : `${name} (cont.)`,
+        name: String(i === 0 ? name : `${name} (cont.)`),
         value: `\`\`\`json\n${str.slice(i, i + MAX_FIELD_LENGTH)}\n\`\`\``
       });
     }
     return chunks;
   };
 
-  // Combine all fields into a single array before adding
   const allFields = [
     ...chunkAndPrepareFields("Assigned Players F1", f1List),
     ...chunkAndPrepareFields("Assigned Players F2", f2List),
     ...chunkAndPrepareFields("Car Numbers (F1/F2)", carNumberList)
   ];
 
-  // Only add fields if there is at least one
-  if (allFields.length) embed.addFields(allFields);
+  if (allFields.length) embed.addFields(...allFields);
 
   try {
     if (!global.backupEmbedId) {
@@ -268,8 +274,6 @@ const updateBackupEmbed = async (guild) => {
     console.error("Failed to update backup embed:", err);
   }
 };
-
-
 
 // ========================
 // DISCORD CLIENT
@@ -293,7 +297,7 @@ const commands = [
     .addStringOption(o => o.setName("team").setDescription("Team").setRequired(true).setAutocomplete(true))
     .addStringOption(o => o.setName("role").setDescription("Role").setRequired(true).setAutocomplete(true)),
   new SlashCommandBuilder().setName("release").setDescription("Release a user from all bot-assigned roles")
-    .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
+    .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true))
     .addUserOption(o => o.setName("user").setDescription("User").setRequired(true)),
   new SlashCommandBuilder().setName("register").setDescription("Register car number, username, flag")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
@@ -373,7 +377,6 @@ client.on("interactionCreate", async interaction => {
     if (assigned[user.id]) return interaction.reply({ content: "User already signed", ephemeral: true });
     if (!team || !role) return interaction.reply({ content: "Team or role missing", ephemeral: true });
 
-    // check max limit
     if (countRoleInTeam(league, team, role) >= config.playerRoles[role].max)
       return interaction.reply({ content: `${role} role is full for ${team}`, ephemeral: true });
 
@@ -442,14 +445,17 @@ client.on("interactionCreate", async interaction => {
     const MAX_FIELD_LENGTH = 1024;
     const safeString = (str) => (typeof str === "string" ? str : String(str));
 
+    const allFields = [];
     for (const teamName in config.teamRoleIds) {
       let list = "";
       for (const [uid, val] of Object.entries(assignedP)) {
         if (val.team === teamName) list += `<@${uid}> - ${safeString(val.role)}\n`;
       }
       if (!list) list = "No members yet";
-      embed.addFields({ name: teamName, value: list.slice(0, MAX_FIELD_LENGTH) });
+      allFields.push({ name: String(teamName), value: String(list.slice(0, MAX_FIELD_LENGTH)) });
     }
+
+    if (allFields.length) embed.addFields(...allFields);
     await interaction.reply({ embeds: [embed] });
   }
 
@@ -458,7 +464,7 @@ client.on("interactionCreate", async interaction => {
   }
 
   if (commandName === "resetdata") {
-    if (!["YOUR_USER_ID_HERE"].includes(interaction.user.id)) return interaction.reply({ content: "Not allowed", ephemeral: true });
+    if (!["902878740659441674"].includes(interaction.user.id)) return interaction.reply({ content: "Not allowed", ephemeral: true });
 
     assignedPlayersF1 = {};
     assignedPlayersF2 = {};
@@ -470,13 +476,6 @@ client.on("interactionCreate", async interaction => {
     await updateLiveLineup(interaction.guild, "F2");
     await updateCarNumberEmbed(interaction.guild);
     await updateBackupEmbed(interaction.guild);
-  }
-
-  if (commandName === "cleanname") {
-    interaction.guild.members.cache.forEach(m => {
-      if (m.manageable) m.setNickname(null).catch(() => {});
-    });
-    await interaction.reply({ content: "Reset all nicknames", ephemeral: true });
   }
 
   if (commandName === "carnumberclaim") {
