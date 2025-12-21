@@ -219,7 +219,7 @@ const updateBackupEmbed = async (guild) => {
     .setColor("Purple")
     .setTimestamp();
 
-  // Get F1 players
+  // --- Assigned Players ---
   const f1Players = Object.entries(assignedPlayersF1).map(
     ([uid, val]) => `<@${uid}> - ${val.role} (${val.team})`
   );
@@ -228,7 +228,6 @@ const updateBackupEmbed = async (guild) => {
     value: f1Players.length ? f1Players.join("\n").slice(0, 1024) : "No players yet."
   });
 
-  // Get F2 players
   const f2Players = Object.entries(assignedPlayersF2).map(
     ([uid, val]) => `<@${uid}> - ${val.role} (${val.team})`
   );
@@ -237,9 +236,9 @@ const updateBackupEmbed = async (guild) => {
     value: f2Players.length ? f2Players.join("\n").slice(0, 1024) : "No players yet."
   });
 
-  // Car numbers
-  const carNumbersF1 = carNumberClaims.F1.map(c => `#${c.number} — <@${c.userId}>`);
-  const carNumbersF2 = carNumberClaims.F2.map(c => `#${c.number} — <@${c.userId}>`);
+  // --- Car Numbers ---
+  const carNumbersF1 = (carNumberClaims.F1 || []).map(c => `#${c.number} — <@${c.userId}>`);
+  const carNumbersF2 = (carNumberClaims.F2 || []).map(c => `#${c.number} — <@${c.userId}>`);
   embed.addFields(
     { name: "Car Numbers F1", value: carNumbersF1.length ? carNumbersF1.join("\n").slice(0, 1024) : "No car numbers yet." },
     { name: "Car Numbers F2", value: carNumbersF2.length ? carNumbersF2.join("\n").slice(0, 1024) : "No car numbers yet." }
@@ -261,6 +260,7 @@ const updateBackupEmbed = async (guild) => {
     console.error("Failed to update backup embed:", err);
   }
 };
+
 
 
 
