@@ -19,6 +19,7 @@ const assignedFileF2 = path.join(dataDir, "assignedPlayersF2.json");
 const registrationFile = path.join(dataDir, "registrationData.json");
 const liveEmbedFile = path.join(dataDir, "liveLineup.json");
 const carNumberClaimFile = path.join(dataDir, "carNumberClaims.json");
+const FIA_DATA_CHANNEL_ID = "1452397713252548638";
 
 if (!fs.existsSync(assignedFileF1)) fs.writeFileSync(assignedFileF1, JSON.stringify({}, null, 2));
 if (!fs.existsSync(assignedFileF2)) fs.writeFileSync(assignedFileF2, JSON.stringify({}, null, 2));
@@ -205,6 +206,56 @@ const updateCarNumberEmbed = async (guild) => {
   } catch (err) {
     console.error("Failed to update car number embed:", err);
   }
+};
+
+const sendDataBackupEmbeds = async (guild) => {
+  const channel = guild.channels.cache.get(FIA_DATA_CHANNEL_ID);
+  if (!channel?.isTextBased()) return;
+
+  // --- CAR NUMBERS ---
+  const carData = {
+    F1: carNumberClaims.F1 || [],
+    F2: carNumberClaims.F2 || []
+  };
+
+  const carEmbed = new EmbedBuilder()
+    .setTitle("🗂 FIA DATA BACKUP — Car Number Claims")
+    .setColor("DarkBlue")
+    .setDescription(
+      "```json\n" +
+      JSON.stringify(carData, null, 2) +
+      "\n```"
+    )
+    .setFooter({ text: "Copy-paste this to restore carNumberClaims.json" })
+    .setTimestamp();
+
+  // --- ASSIGNED F1 ---
+  const f1Embed = new EmbedBuilder()
+    .setTitle("🗂 FIA DATA BACKUP — Assigned Players F1")
+    .setColor("Red")
+    .setDescription(
+      "```json\n" +
+      JSON.stringify(assignedPlayersF1, null, 2) +
+      "\n```"
+    )
+    .setFooter({ text: "Restore assignedPlayersF1.json" })
+    .setTimestamp();
+
+  // --- ASSIGNED F2 ---
+  const f2Embed = new EmbedBuilder()
+    .setTitle("🗂 FIA DATA BACKUP — Assigned Players F2")
+    .setColor("Green")
+    .setDescription(
+      "```json\n" +
+      JSON.stringify(assignedPlayersF2, null, 2) +
+      "\n```"
+    )
+    .setFooter({ text: "Restore assignedPlayersF2.json" })
+    .setTimestamp();
+
+  await channel.send({ embeds: [carEmbed] });
+  await channel.send({ embeds: [f1Embed] });
+  await channel.send({ embeds: [f2Embed] });
 };
 
 // ========================
