@@ -49,9 +49,9 @@ const PORT = process.env.PORT || 3000;
 app.get("/", (req, res) => res.send("Bot is alive!"));
 app.listen(PORT, () => console.log(`Health check server running on port ${PORT}`));
 
-// ========================
+// =========================
 // F1/F2 CONFIG
-// ========================
+// =========================
 const seriesConfigs = {
   F1: {
     teamRoleIds: {
