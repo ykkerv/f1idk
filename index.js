@@ -226,10 +226,11 @@ const commands = [
 // ========================
 // ADMIN CHECK
 // ========================
+const ADMIN_ROLE_IDS = ["1432285963287003156"]; // add all admin role IDs here
 const isAdmin = async (interaction) => {
   try {
     const member = await interaction.guild.members.fetch(interaction.user.id);
-    return member.roles.cache.has("1432285963287003156");
+    return member.roles.cache.some(r => ADMIN_ROLE_IDS.includes(r.id));
   } catch {
     return false;
   }
@@ -344,27 +345,51 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   // -------------------- CARNUMBERCLAIM --------------------
-  if (commandName === "carnumberclaim") {
-    if (!(await isAdmin(interaction))) return interaction.reply({ content: "Not authorized.", ephemeral: true });
+if (commandName === "carnumberclaim") {
+  if (!(await isAdmin(interaction))) return interaction.reply({ content: "Not authorized.", ephemeral: true });
 
-    const number = options.getInteger("number");
-    if (!carNumberClaims[league]) carNumberClaims[league] = [];
-    if (carNumberClaims[league].includes(number)) return interaction.reply({ content: `Car number ${number} is already claimed in ${league}!`, ephemeral: true });
+  const number = options.getInteger("number");
+  if (!carNumberClaims[league]) carNumberClaims[league] = [];
+  if (carNumberClaims[league].includes(number)) return interaction.reply({ content: `Car number ${number} is already claimed in ${league}!`, ephemeral: true });
 
-    carNumberClaims[league].push(number);
-    saveCarNumberClaims();
+  carNumberClaims[league].push(number);
+  saveCarNumberClaims();
 
-    const channel = guild.channels.cache.get("1452244527749533726");
-    if (channel?.isTextBased()) {
-      const embed = new EmbedBuilder()
-        .setTitle(`${league} Claimed Car Numbers`)
-        .setColor("Blue")
-        .setDescription(carNumberClaims[league].join(", "));
-      channel.send({ embeds: [embed] }).catch(() => {});
+  const channel = guild.channels.cache.get("1452244527749533726");
+  if (!channel?.isTextBased()) return interaction.reply({ content: "Claim channel not found.", ephemeral: true });
+
+  // Try to edit the existing embed if exists
+  const lastMsgId = carNumberClaims[`${league}_embed`] || null;
+  const embed = new EmbedBuilder()
+    .setTitle(`${league} Claimed Car Numbers`)
+    .setColor("Blue")
+    .setDescription(carNumberClaims[league].length ? carNumberClaims[league].join(", ") : "No claimed numbers yet.");
+
+  try {
+    if (lastMsgId) {
+      const msg = await channel.messages.fetch(lastMsgId).catch(() => null);
+      if (msg) {
+        await msg.edit({ embeds: [embed] });
+      } else {
+        const msgNew = await channel.send({ embeds: [embed] });
+        carNumberClaims[`${league}_embed`] = msgNew.id;
+        saveCarNumberClaims();
+      }
+    } else {
+      const msgNew = await channel.send({ embeds: [embed] });
+      carNumberClaims[`${league}_embed`] = msgNew.id;
+      saveCarNumberClaims();
     }
-
-    return interaction.reply({ content: `✅ Car number ${number} claimed for ${league}`, ephemeral: true });
+  } catch (err) {
+    console.error(err);
+    const msgNew = await channel.send({ embeds: [embed] });
+    carNumberClaims[`${league}_embed`] = msgNew.id;
+    saveCarNumberClaims();
   }
+
+  return interaction.reply({ content: `✅ Car number ${number} claimed for ${league}`, ephemeral: true });
+}
+
 
   // -------------------- REGISTER --------------------
   if (commandName === "register") {
