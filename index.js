@@ -196,6 +196,7 @@ const updateCarNumberEmbed = async (guild, league) => {
     );
 
   try {
+    if (!carNumberClaims.embeds) carNumberClaims.embeds = {};
     if (carNumberClaims.embeds[league]) {
       const msg = await channel.messages.fetch(carNumberClaims.embeds[league]).catch(() => null);
       if (msg) return msg.edit({ embeds: [embed] });
@@ -367,20 +368,25 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   // -------------------- CAR NUMBER CLAIM --------------------
-  if (commandName === "carnumberclaim") {
-    const number = options.getInteger("number");
-    if (isCarNumberTaken(league, number, user.id)) {
-      return interaction.reply({ content: `Car number ${number} is already claimed by someone else in ${league}!`, ephemeral: true });
-    }
+if (commandName === "carnumberclaim") {
+  const number = options.getInteger("number");
 
-    if (!carNumberClaims[league]) carNumberClaims[league] = [];
-    carNumberClaims[league] = carNumberClaims[league].filter(c => c.userId !== user.id); // remove old claim
-    carNumberClaims[league].push({ userId: user.id, number });
-    saveCarNumberClaims();
+  if (!carNumberClaims[league]) carNumberClaims[league] = [];
 
-    await updateCarNumberEmbed(guild, league);
-    return interaction.reply({ content: `You have claimed car number ${number} in ${league}!`, ephemeral: true });
+  // Check if number is already claimed by someone else
+  if (carNumberClaims[league].some(c => c.number === number && c.userId !== user.id)) {
+    return interaction.reply({ content: `Car number ${number} is already claimed by someone else in ${league}!`, ephemeral: true });
   }
+
+  // Remove any previous claim by this user
+  carNumberClaims[league] = carNumberClaims[league].filter(c => c.userId !== user.id);
+  carNumberClaims[league].push({ number, userId: user.id });
+  saveCarNumberClaims();
+
+  await updateCarNumberEmbed(guild, league);
+
+  return interaction.reply({ content: `✅ You have claimed car number ${number} in ${league}!`, ephemeral: true });
+}
 
   // -------------------- REGISTER --------------------
   if (commandName === "register") {
