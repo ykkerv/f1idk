@@ -219,7 +219,7 @@ const updateBackupEmbed = async (guild) => {
   if (!channel?.isTextBased()) return;
 
   const embed = new EmbedBuilder()
-    .setTitle("WARL Backup Embed (PMO)")
+    .setTitle("WARL Backup System")
     .setColor("Purple")
     .setTimestamp();
 
@@ -232,18 +232,28 @@ const updateBackupEmbed = async (guild) => {
     : "{}";
 
   // Convert car numbers to JSON-style string
-  const carNumbers = {
-    F1: carNumberClaims.F1 || [],
-    F2: carNumberClaims.F2 || []
-  };
+  const carNumbers = { F1: carNumberClaims.F1 || [], F2: carNumberClaims.F2 || [] };
   const carNumberList = JSON.stringify(carNumbers, null, 2);
 
-  // Add fields as JSON code blocks
-  embed.addFields(
-    { name: "Assigned Players F1", value: `\`\`\`json\n${f1List}\n\`\`\`` },
-    { name: "Assigned Players F2", value: `\`\`\`json\n${f2List}\n\`\`\`` },
-    { name: "Car Numbers (F1/F2)", value: `\`\`\`json\n${carNumberList}\n\`\`\`` }
-  );
+  // Helper to split long strings into multiple embed fields
+  const chunkString = (str, maxLength = 1024) => {
+    const chunks = [];
+    for (let i = 0; i < str.length; i += maxLength) {
+      chunks.push(str.slice(i, i + maxLength));
+    }
+    return chunks;
+  };
+
+  const addChunkedFields = (name, str) => {
+    const chunks = chunkString(str, 1024);
+    chunks.forEach((chunk, idx) => {
+      embed.addFields({ name: idx === 0 ? name : `${name} (cont.)`, value: `\`\`\`json\n${chunk}\n\`\`\`` });
+    });
+  };
+
+  addChunkedFields("Assigned Players F1", f1List);
+  addChunkedFields("Assigned Players F2", f2List);
+  addChunkedFields("Car Numbers (F1/F2)", carNumberList);
 
   try {
     if (!global.backupEmbedId) {
