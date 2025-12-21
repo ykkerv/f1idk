@@ -212,20 +212,12 @@ const sendDataBackupEmbeds = async (guild) => {
   const channel = guild.channels.cache.get(FIA_DATA_CHANNEL_ID);
   if (!channel?.isTextBased()) return;
 
-  // --- CAR NUMBERS ---
-  const carData = {
-    F1: carNumberClaims.F1 || [],
-    F2: carNumberClaims.F2 || []
-  };
-
+  // --- CAR NUMBERS --- 
+  const carData = { F1: carNumberClaims.F1 || [], F2: carNumberClaims.F2 || [] };
   const carEmbed = new EmbedBuilder()
     .setTitle("🗂 FIA DATA BACKUP — Car Number Claims")
     .setColor("DarkBlue")
-    .setDescription(
-      "```json\n" +
-      JSON.stringify(carData, null, 2) +
-      "\n```"
-    )
+    .setDescription("```json\n" + JSON.stringify(carData, null, 2) + "\n```")
     .setFooter({ text: "Copy-paste this to restore carNumberClaims.json" })
     .setTimestamp();
 
@@ -233,11 +225,7 @@ const sendDataBackupEmbeds = async (guild) => {
   const f1Embed = new EmbedBuilder()
     .setTitle("🗂 FIA DATA BACKUP — Assigned Players F1")
     .setColor("Red")
-    .setDescription(
-      "```json\n" +
-      JSON.stringify(assignedPlayersF1, null, 2) +
-      "\n```"
-    )
+    .setDescription("```json\n" + JSON.stringify(assignedPlayersF1, null, 2) + "\n```")
     .setFooter({ text: "Restore assignedPlayersF1.json" })
     .setTimestamp();
 
@@ -245,11 +233,7 @@ const sendDataBackupEmbeds = async (guild) => {
   const f2Embed = new EmbedBuilder()
     .setTitle("🗂 FIA DATA BACKUP — Assigned Players F2")
     .setColor("Green")
-    .setDescription(
-      "```json\n" +
-      JSON.stringify(assignedPlayersF2, null, 2) +
-      "\n```"
-    )
+    .setDescription("```json\n" + JSON.stringify(assignedPlayersF2, null, 2) + "\n```")
     .setFooter({ text: "Restore assignedPlayersF2.json" })
     .setTimestamp();
 
@@ -274,30 +258,24 @@ const commands = [
     .addUserOption(o => o.setName("user").setDescription("User to sign").setRequired(true))
     .addStringOption(o => o.setName("team").setDescription("Team").setRequired(true).setAutocomplete(true))
     .addStringOption(o => o.setName("role").setDescription("Role").setRequired(true).setAutocomplete(true)),
-
   new SlashCommandBuilder().setName("move").setDescription("Move a user to a new team and role")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addUserOption(o => o.setName("user").setDescription("User to move").setRequired(true))
     .addStringOption(o => o.setName("team").setDescription("Team").setRequired(true).setAutocomplete(true))
     .addStringOption(o => o.setName("role").setDescription("Role").setRequired(true).setAutocomplete(true)),
-
   new SlashCommandBuilder().setName("release").setDescription("Release a user from all bot-assigned roles")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addUserOption(o => o.setName("user").setDescription("User").setRequired(true)),
-
   new SlashCommandBuilder().setName("register").setDescription("Register car number, username, flag")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addIntegerOption(o => o.setName("carnumber").setDescription("Car number").setRequired(true))
     .addStringOption(o => o.setName("username").setDescription("Username").setRequired(true))
     .addStringOption(o => o.setName("flag").setDescription("Flag emoji").setRequired(true)),
-
   new SlashCommandBuilder().setName("profile").setDescription("Show user profile")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addUserOption(o => o.setName("user").setDescription("User").setRequired(false)),
-
   new SlashCommandBuilder().setName("lineupyear").setDescription("Show all teams lineup")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices)),
-
   new SlashCommandBuilder().setName("help").setDescription("Show commands"),
   new SlashCommandBuilder().setName("resetdata").setDescription("Reset all bot data (restricted user only)"),
   new SlashCommandBuilder().setName("cleanname").setDescription("Reset all user nicknames to default"),
@@ -316,7 +294,6 @@ client.once("ready", async () => {
   try {
     await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
     console.log("Commands registered!");
-
     client.guilds.cache.forEach(async guild => {
       await updateLiveLineup(guild, "F1");
       await updateLiveLineup(guild, "F2");
@@ -348,14 +325,14 @@ client.on("interactionCreate", async interaction => {
 });
 
 // ========================
-// COMMAND HANDLER (FULL)
+// COMMAND HANDLER
 // ========================
 client.on("interactionCreate", async interaction => {
   if (!interaction.isCommand()) return;
   const { commandName, options, user, guild } = interaction;
   const league = options.getString("league");
   const config = league ? seriesConfigs[league] : null;
-  const assignedPlayers = getAssignedPlayers(league);
+  const assignedPlayers = league ? getAssignedPlayers(league) : null;
 
   // ---- HELP ----
   if (commandName === "help") 
@@ -366,11 +343,11 @@ client.on("interactionCreate", async interaction => {
     if (user.id !== "902878740659441674") return interaction.reply({ content: "Not authorized.", ephemeral: true });
     for (const memberId in assignedPlayersF1) {
       const member = await guild.members.fetch(memberId).catch(() => null);
-      if (member) member.roles.remove(seriesConfigs.F1.playerRoles[assignedPlayersF1[memberId].role]?.id).catch(() => {});
+      if (member) member.roles.remove(Object.values(seriesConfigs.F1.playerRoles).map(r => r.id)).catch(() => {});
     }
     for (const memberId in assignedPlayersF2) {
       const member = await guild.members.fetch(memberId).catch(() => null);
-      if (member) member.roles.remove(seriesConfigs.F2.playerRoles[assignedPlayersF2[memberId].role]?.id).catch(() => {});
+      if (member) member.roles.remove(Object.values(seriesConfigs.F2.playerRoles).map(r => r.id)).catch(() => {});
     }
     assignedPlayersF1 = {}; assignedPlayersF2 = {}; registrationData = {}; liveLineupIds = { F1:null, F2:null }; carNumberClaims = { F1:[], F2:[], embeds:{} };
     saveAssignedF1(); saveAssignedF2(); saveRegistration(); saveLiveEmbedIds(); saveCarNumberClaims();
