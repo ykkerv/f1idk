@@ -24,8 +24,4 @@
     "1185826673854259200": { "series": "F1", "team": "Aston Martin Aramco F1 team", "role": "Main Driver F1" },
     "1424046314492002367": { "series": "F1", "team": "Aston Martin Aramco F1 team", "role": "Team Principal F1"},
     "940298559717249025": { "series": "F1", "team": "Aston Martin Aramco F1 team", "role": "Main Driver F1" }
-  },
-  "embeds": {
-    "live": "1452400029078913155"
-  }
 }
