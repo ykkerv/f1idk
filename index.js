@@ -30,26 +30,16 @@ let liveLineupIds = JSON.parse(fs.readFileSync(liveEmbedFile, "utf8"));
 let carNumberClaims = JSON.parse(fs.readFileSync(carNumberClaimFile, "utf8"));
 
 // ========================
-// CRONITOR HEARTBEAT
+// SAVE HELPERS
 // ========================
-const CRONITOR_URL = "https://cronitor.link/p/5228af7c42f54ba681f4b7c436c08f1b/luqCyv";
-let heartbeatStarted = false;
-function startCronitorHeartbeat() {
-  if (heartbeatStarted) return;
-  heartbeatStarted = true;
-  setInterval(async () => {
-    try { await fetch(CRONITOR_URL); console.log("Cronitor heartbeat sent"); }
-    catch (err) { console.error("Cronitor heartbeat failed", err); }
-  }, 60 * 1000);
-}
+const saveAssignedF1 = () => fs.writeFileSync(assignedFileF1, JSON.stringify(assignedPlayersF1, null, 2));
+const saveAssignedF2 = () => fs.writeFileSync(assignedFileF2, JSON.stringify(assignedPlayersF2, null, 2));
+const saveRegistration = () => fs.writeFileSync(registrationFile, JSON.stringify(registrationData, null, 2));
+const saveLiveEmbedIds = () => fs.writeFileSync(liveEmbedFile, JSON.stringify(liveLineupIds, null, 2));
+const saveCarNumberClaims = () => fs.writeFileSync(carNumberClaimFile, JSON.stringify(carNumberClaims, null, 2));
 
-// ========================
-// EXPRESS HEALTH CHECK
-// ========================
-const app = express();
-const PORT = process.env.PORT || 3000;
-app.get("/", (req, res) => res.send("Bot is alive!"));
-app.listen(PORT, () => console.log(`Health check server running on port ${PORT}`));
+const getAssignedPlayers = (series) => series === "F1" ? assignedPlayersF1 : assignedPlayersF2;
+const saveAssigned = (series) => series === "F1" ? saveAssignedF1() : saveAssignedF2();
 
 // ========================
 // F1/F2 CONFIG
@@ -102,20 +92,18 @@ const seriesConfigs = {
 };
 
 // ========================
-// SAVE HELPERS
-// ========================
-const saveAssignedF1 = () => fs.writeFileSync(assignedFileF1, JSON.stringify(assignedPlayersF1, null, 2));
-const saveAssignedF2 = () => fs.writeFileSync(assignedFileF2, JSON.stringify(assignedPlayersF2, null, 2));
-const saveRegistration = () => fs.writeFileSync(registrationFile, JSON.stringify(registrationData, null, 2));
-const saveLiveEmbedIds = () => fs.writeFileSync(liveEmbedFile, JSON.stringify(liveLineupIds, null, 2));
-const saveCarNumberClaims = () => fs.writeFileSync(carNumberClaimFile, JSON.stringify(carNumberClaims, null, 2));
-
-const getAssignedPlayers = (series) => series === "F1" ? assignedPlayersF1 : assignedPlayersF2;
-const saveAssigned = (series) => series === "F1" ? saveAssignedF1() : saveAssignedF2();
-
-// ========================
 // HELPERS
 // ========================
+const countRoleInTeam = (series, team, role) => {
+  const assigned = getAssignedPlayers(series);
+  return Object.values(assigned).filter(p => p.team === team && p.role === role).length;
+};
+
+const isCarNumberTaken = (series, number, userId) => {
+  return Object.entries(registrationData).some(([uid, data]) => data.series === series && data.carnumber === number && uid !== userId) ||
+         carNumberClaims[series]?.some(c => c.number === number);
+};
+
 const sendEmbed = async (guild, title, description, color, executorTag, updateChannelId) => {
   const embed = new EmbedBuilder()
     .setTitle(`Team Update: ${title}`)
@@ -128,15 +116,9 @@ const sendEmbed = async (guild, title, description, color, executorTag, updateCh
   if (logChannel?.isTextBased()) logChannel.send({ embeds: [embed] }).catch(console.error);
 };
 
-const countRoleInTeam = (series, team, role) => {
-  const assigned = getAssignedPlayers(series);
-  return Object.values(assigned).filter(p => p.team === team && p.role === role).length;
-};
-
-const isCarNumberTaken = (series, number, userId) => {
-  return Object.entries(registrationData).some(([uid, data]) => data.series === series && data.carnumber === number && uid !== userId);
-};
-
+// ========================
+// LIVE LINEUP
+// ========================
 const updateLiveLineup = async (guild, series) => {
   const config = seriesConfigs[series];
   const assignedPlayers = getAssignedPlayers(series);
@@ -167,6 +149,35 @@ const updateLiveLineup = async (guild, series) => {
     const msg = await channel.send({ embeds: [embed] });
     liveLineupIds[series] = msg.id;
     saveLiveEmbedIds();
+  }
+};
+
+// ========================
+// CAR NUMBER EMBED
+// ========================
+const updateCarNumberEmbed = async (guild, league) => {
+  const channel = guild.channels.cache.get("1452244527749533726");
+  if (!channel?.isTextBased()) return;
+
+  const embed = new EmbedBuilder()
+    .setTitle(`${league} Claimed Car Numbers`)
+    .setColor("Blue")
+    .setDescription(
+      carNumberClaims[league].length
+        ? carNumberClaims[league].map(c => `#${c.number} — <@${c.userId}>`).join("\n")
+        : "No claimed numbers yet."
+    );
+
+  try {
+    if (carNumberClaims.embeds[league]) {
+      const msg = await channel.messages.fetch(carNumberClaims.embeds[league]).catch(() => null);
+      if (msg) return msg.edit({ embeds: [embed] });
+    }
+    const msg = await channel.send({ embeds: [embed] });
+    carNumberClaims.embeds[league] = msg.id;
+    saveCarNumberClaims();
+  } catch (err) {
+    console.error("Failed to update car number embed:", err);
   }
 };
 
@@ -226,16 +237,15 @@ const commands = [
 // ========================
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user.tag}`);
-  startCronitorHeartbeat();
-
+  client.guilds.cache.forEach(guild => {
+    updateLiveLineup(guild, "F1");
+    updateLiveLineup(guild, "F2");
+    updateCarNumberEmbed(guild, "F1");
+    updateCarNumberEmbed(guild, "F2");
+  });
   try {
     await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
     console.log("Commands registered!");
-
-    client.guilds.cache.forEach(guild => {
-      updateLiveLineup(guild, "F1");
-      updateLiveLineup(guild, "F2");
-    });
   } catch (err) { console.error(err); }
 });
 
@@ -295,7 +305,7 @@ client.on("interactionCreate", async (interaction) => {
   if (commandName === "resetdata") {
     if (user.id !== "902878740659441674") return interaction.reply({ content: "Not authorized.", ephemeral: true });
 
-    // Remove roles from Discord
+    // Remove roles
     for (const memberId in assignedPlayersF1) {
       const member = await guild.members.fetch(memberId).catch(() => null);
       if (member) {
@@ -327,48 +337,18 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "✅ All nicknames reset to default.", ephemeral: true });
   }
 
-  // -------------------- CARNUMBERCLAIM --------------------
+  // -------------------- CAR NUMBER CLAIM --------------------
   if (commandName === "carnumberclaim") {
     const number = options.getInteger("number");
-    const league = options.getString("league");
     if (!carNumberClaims[league]) carNumberClaims[league] = [];
 
-    if (carNumberClaims[league].some(n => n.number === number))
+    if (carNumberClaims[league].some(c => c.number === number))
       return interaction.reply({ content: `Car number ${number} is already claimed in ${league}!`, ephemeral: true });
 
-    carNumberClaims[league].push({ number, user: user.tag });
+    carNumberClaims[league].push({ number, userId: user.id, username: user.username });
     saveCarNumberClaims();
 
-    const channel = guild.channels.cache.get("1452244527749533726");
-    if (!channel?.isTextBased()) return interaction.reply({ content: "Claim channel not found.", ephemeral: true });
-
-    const embed = new EmbedBuilder()
-      .setTitle(`${league} Claimed Car Numbers`)
-      .setColor("Blue")
-      .setDescription(carNumberClaims[league].map(c => `${c.number} - ${c.user}`).join("\n") || "No claimed numbers yet.");
-
-    try {
-      const lastMsgId = carNumberClaims.embeds[league];
-      if (lastMsgId) {
-        const msg = await channel.messages.fetch(lastMsgId).catch(() => null);
-        if (msg) await msg.edit({ embeds: [embed] });
-        else {
-          const newMsg = await channel.send({ embeds: [embed] });
-          carNumberClaims.embeds[league] = newMsg.id;
-          saveCarNumberClaims();
-        }
-      } else {
-        const newMsg = await channel.send({ embeds: [embed] });
-        carNumberClaims.embeds[league] = newMsg.id;
-        saveCarNumberClaims();
-      }
-    } catch (err) {
-      console.error(err);
-      const newMsg = await channel.send({ embeds: [embed] });
-      carNumberClaims.embeds[league] = newMsg.id;
-      saveCarNumberClaims();
-    }
-
+    await updateCarNumberEmbed(guild, league);
     return interaction.reply({ content: `✅ Car number ${number} claimed for ${league}`, ephemeral: true });
   }
 
@@ -379,7 +359,7 @@ client.on("interactionCreate", async (interaction) => {
     const flag = options.getString("flag");
 
     if (!flag) return interaction.reply({ content: "Flag is required!", ephemeral: true });
-    if (isCarNumberTaken(league, carNumber, user.id) || carNumberClaims[league]?.some(c => c.number === carNumber))
+    if (isCarNumberTaken(league, carNumber, user.id))
       return interaction.reply({ content: `Car number ${carNumber} is already taken in ${league}!`, ephemeral: true });
 
     registrationData[user.id] = { series: league, carnumber: carNumber, username, flag };
@@ -387,10 +367,23 @@ client.on("interactionCreate", async (interaction) => {
 
     try {
       const member = await guild.members.fetch(user.id);
-      if (member) await member.setNickname(`${carNumber} | ${username} ${flag}`);
-    } catch {}
+      if (member) {
+        const botMember = await guild.members.fetch(client.user.id);
+        if (botMember.roles.highest.position > member.roles.highest.position) {
+          await member.setNickname(`${carNumber} | ${username} ${flag}`);
+        } else {
+          return interaction.reply({
+            content: `✅ Registered as ${carNumber} | ${username} ${flag}, but cannot change nickname (role hierarchy).`,
+            ephemeral: true
+          });
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      return interaction.reply({ content: `✅ Registered as ${carNumber} | ${username} ${flag}, nickname change failed.`, ephemeral: true });
+    }
 
-    return interaction.reply({ content: `Registered as ${carNumber} | ${username} ${flag} in ${league}`, ephemeral: true });
+    return interaction.reply({ content: `✅ Registered as ${carNumber} | ${username} ${flag} in ${league}`, ephemeral: true });
   }
 
   // -------------------- SIGN --------------------
