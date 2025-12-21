@@ -19,6 +19,7 @@ const assignedFileF2 = path.join(dataDir, "assignedPlayersF2.json");
 const registrationFile = path.join(dataDir, "registrationData.json");
 const liveEmbedFile = path.join(dataDir, "liveLineup.json");
 const carNumberClaimFile = path.join(dataDir, "carNumberClaims.json");
+const backupEmbedFile = path.join(dataDir, "backupEmbed.json");
 const FIA_DATA_CHANNEL_ID = "1452397713252548638";
 
 if (!fs.existsSync(assignedFileF1)) fs.writeFileSync(assignedFileF1, JSON.stringify({}, null, 2));
@@ -26,12 +27,14 @@ if (!fs.existsSync(assignedFileF2)) fs.writeFileSync(assignedFileF2, JSON.string
 if (!fs.existsSync(registrationFile)) fs.writeFileSync(registrationFile, JSON.stringify({}, null, 2));
 if (!fs.existsSync(liveEmbedFile)) fs.writeFileSync(liveEmbedFile, JSON.stringify({ F1:null, F2:null }, null, 2));
 if (!fs.existsSync(carNumberClaimFile)) fs.writeFileSync(carNumberClaimFile, JSON.stringify({ F1:[], F2:[], embeds:{} }, null, 2));
+if (!fs.existsSync(backupEmbedFile)) fs.writeFileSync(backupEmbedFile, JSON.stringify({}, null, 2));
 
 let assignedPlayersF1 = JSON.parse(fs.readFileSync(assignedFileF1, "utf8"));
 let assignedPlayersF2 = JSON.parse(fs.readFileSync(assignedFileF2, "utf8"));
 let registrationData = JSON.parse(fs.readFileSync(registrationFile, "utf8"));
 let liveLineupIds = JSON.parse(fs.readFileSync(liveEmbedFile, "utf8"));
 let carNumberClaims = JSON.parse(fs.readFileSync(carNumberClaimFile, "utf8"));
+let backupEmbedData = JSON.parse(fs.readFileSync(backupEmbedFile, "utf8"));
 
 // ========================
 // CRONITOR HEARTBEAT
@@ -113,6 +116,7 @@ const saveAssignedF2 = () => fs.writeFileSync(assignedFileF2, JSON.stringify(ass
 const saveRegistration = () => fs.writeFileSync(registrationFile, JSON.stringify(registrationData, null, 2));
 const saveLiveEmbedIds = () => fs.writeFileSync(liveEmbedFile, JSON.stringify(liveLineupIds, null, 2));
 const saveCarNumberClaims = () => fs.writeFileSync(carNumberClaimFile, JSON.stringify(carNumberClaims, null, 2));
+const saveBackupEmbed = () => fs.writeFileSync(backupEmbedFile, JSON.stringify(backupEmbedData, null, 2));
 
 const getAssignedPlayers = (series) => series === "F1" ? assignedPlayersF1 : assignedPlayersF2;
 const saveAssigned = (series) => series === "F1" ? saveAssignedF1() : saveAssignedF2();
@@ -206,6 +210,39 @@ const updateCarNumberEmbed = async (guild) => {
 };
 
 // ========================
+// BACKUP EMBED
+// ========================
+const updateBackupEmbed = async (guild) => {
+  const channel = guild.channels.cache.get(FIA_DATA_CHANNEL_ID);
+  if (!channel?.isTextBased()) return;
+
+  const embed = new EmbedBuilder()
+    .setTitle("Live Backup Lineup")
+    .setColor("Purple")
+    .setTimestamp();
+
+  const f1Assigned = assignedPlayersF1;
+  const f2Assigned = assignedPlayersF2;
+
+  const f1List = Object.entries(f1Assigned).length ? Object.entries(f1Assigned).map(([id, d]) => `<@${id}> - ${d.team} (${d.role})`).join("\n") : "No F1 data yet";
+  const f2List = Object.entries(f2Assigned).length ? Object.entries(f2Assigned).map(([id, d]) => `<@${id}> - ${d.team} (${d.role})`).join("\n") : "No F2 data yet";
+
+  embed.addFields({ name: "F1", value: f1List }, { name: "F2", value: f2List });
+
+  try {
+    if (backupEmbedData.id) {
+      const msg = await channel.messages.fetch(backupEmbedData.id).catch(() => null);
+      if (msg) return msg.edit({ embeds: [embed] });
+    }
+    const msg = await channel.send({ embeds: [embed] });
+    backupEmbedData.id = msg.id;
+    saveBackupEmbed();
+  } catch (err) {
+    console.error("Failed to update backup embed:", err);
+  }
+};
+
+// ========================
 // DISCORD CLIENT
 // ========================
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
@@ -261,6 +298,7 @@ client.once("ready", async () => {
       await updateLiveLineup(guild, "F1");
       await updateLiveLineup(guild, "F2");
       await updateCarNumberEmbed(guild);
+      await updateBackupEmbed(guild);
     });
   } catch (err) { console.error(err); }
 });
@@ -317,8 +355,8 @@ client.on("interactionCreate", async interaction => {
       const member = await guild.members.fetch(memberId).catch(() => null);
       if (member) member.roles.remove(Object.values(seriesConfigs.F2.playerRoles).map(r => r.id)).catch(() => {});
     }
-    assignedPlayersF1 = {}; assignedPlayersF2 = {}; registrationData = {}; liveLineupIds = { F1:null, F2:null }; carNumberClaims = { F1:[], F2:[], embeds:{} };
-    saveAssignedF1(); saveAssignedF2(); saveRegistration(); saveLiveEmbedIds(); saveCarNumberClaims();
+    assignedPlayersF1 = {}; assignedPlayersF2 = {}; registrationData = {}; liveLineupIds = { F1:null, F2:null }; carNumberClaims = { F1:[], F2:[], embeds:{} }; backupEmbedData = {};
+    saveAssignedF1(); saveAssignedF2(); saveRegistration(); saveLiveEmbedIds(); saveCarNumberClaims(); saveBackupEmbed();
     return interaction.reply({ content: "All data reset successfully!", ephemeral: true });
   }
 
@@ -330,6 +368,7 @@ client.on("interactionCreate", async interaction => {
     carNumberClaims[league].push({ number, userId: user.id });
     saveCarNumberClaims();
     await updateCarNumberEmbed(guild);
+    await updateBackupEmbed(guild);
     return interaction.reply({ content: `✅ You claimed car #${number} in ${league}!`, ephemeral: true });
   }
 
@@ -349,6 +388,7 @@ client.on("interactionCreate", async interaction => {
       await member.setNickname(`${username} #${carNumber} ${flag}`).catch(() => {});
     } catch {}
 
+    await updateBackupEmbed(guild);
     return interaction.reply({ content: `✅ Registered ${username} #${carNumber} ${flag} in ${league}!`, ephemeral: true });
   }
 
@@ -373,6 +413,7 @@ client.on("interactionCreate", async interaction => {
 
     await sendEmbed(guild, "Sign", `<@${target.id}> signed to ${team} as ${role}`, "Green", user.tag, config.updateChannelId);
     await updateLiveLineup(guild, league);
+    await updateBackupEmbed(guild);
     return interaction.reply({ content: `✅ ${target.tag} signed to ${team} as ${role} in ${league}`, ephemeral: true });
   }
 
@@ -400,6 +441,7 @@ client.on("interactionCreate", async interaction => {
 
     await sendEmbed(guild, "Move", `<@${target.id}> moved to ${newTeam} as ${newRole}`, "Orange", user.tag, config.updateChannelId);
     await updateLiveLineup(guild, league);
+    await updateBackupEmbed(guild);
     return interaction.reply({ content: `✅ ${target.tag} moved to ${newTeam} as ${newRole} in ${league}`, ephemeral: true });
   }
 
@@ -421,6 +463,7 @@ client.on("interactionCreate", async interaction => {
 
     await sendEmbed(guild, "Release", `<@${target.id}> released from ${data.team} as ${data.role}`, "Red", user.tag, config.updateChannelId);
     await updateLiveLineup(guild, league);
+    await updateBackupEmbed(guild);
     return interaction.reply({ content: `✅ ${target.tag} released from ${data.team} as ${data.role} in ${league}`, ephemeral: true });
   }
 
@@ -429,6 +472,7 @@ client.on("interactionCreate", async interaction => {
     for (const memberId of Object.keys(assignedPlayers)) {
       try { const member = await guild.members.fetch(memberId); await member.setNickname(null).catch(() => {}); } catch {}
     }
+    await updateBackupEmbed(guild);
     return interaction.reply({ content: "✅ All nicknames reset.", ephemeral: true });
   }
 
@@ -444,7 +488,7 @@ client.on("interactionCreate", async interaction => {
   // ---- LINEUPYEAR ----
   if (commandName === "lineupyear") {
     await updateLiveLineup(guild, league);
+    await updateBackupEmbed(guild);
     return interaction.reply({ content: `✅ Updated ${league} live lineup!`, ephemeral: true });
   }
 });
-
