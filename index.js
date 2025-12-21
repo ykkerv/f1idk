@@ -74,7 +74,7 @@ const seriesConfigs = {
       "Reserve Driver F1": { id: "1432739468770541739", max: 2 },
       "Engineer F1": { id: "1432786005106102342", max: 2 }
     },
-    adminRoles: [], // using role check
+    adminRoles: [],
     updateChannelId: "1432370687888064735",
     liveLineupChannelId: "1432370391929716787"
   },
@@ -84,7 +84,7 @@ const seriesConfigs = {
       "Mercedes-AMG PETRONAS F2 team": "1432721882582614058", 
       "Oracle Red Bull Racing F2 team": "1432362082250260640",
       "Scuderia Ferrari F2 team": "1432734720449577101", 
-      "MoneyGram Haas F2 team": "1432734837248360448",
+      "MoneyGram Haas F2 team": "1432734837248360444",
       "Williams Racing F2 team": "1432734965577285855",
       "BWT Alpine F2 team": "1432735063640113254", 
       "Visa Cash App Racing Bulls F2 team": "1432735203645722695", 
@@ -216,17 +216,13 @@ const commands = [
 
   new SlashCommandBuilder().setName("resetdata").setDescription("Reset all bot data (admin only)"),
 
-  new SlashCommandBuilder().setName("cleanname").setDescription("Reset all user nicknames to default (admin only)"),
-
-  new SlashCommandBuilder().setName("carnumberclaim").setDescription("Claim car numbers for a league (admin only)")
-    .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
-    .addIntegerOption(o => o.setName("number").setDescription("Car number to claim").setRequired(true))
+  new SlashCommandBuilder().setName("cleanname").setDescription("Reset all user nicknames to default"),
 ].map(c => c.toJSON());
 
 // ========================
 // ADMIN CHECK
 // ========================
-const ADMIN_ROLE_IDS = ["1432285963287003156"]; // add all admin role IDs here
+const ADMIN_ROLE_IDS = ["1432285963287003156"];
 const isAdmin = async (interaction) => {
   try {
     const member = await interaction.guild.members.fetch(interaction.user.id);
@@ -299,8 +295,7 @@ client.on("interactionCreate", async (interaction) => {
 /profile - Show user profile
 /lineupyear - Show all teams lineup
 /resetdata - Reset all bot data (admin only)
-/cleanname - Reset all nicknames (admin only)
-/carnumberclaim - Claim car numbers (admin only)
+/cleanname - Reset all nicknames
 /help - Show this message`,
       ephemeral: true
     });
@@ -310,7 +305,6 @@ client.on("interactionCreate", async (interaction) => {
   if (commandName === "resetdata") {
     if (!(await isAdmin(interaction))) return interaction.reply({ content: "Not authorized.", ephemeral: true });
 
-    // Remove roles from Discord
     for (const memberId in assignedPlayersF1) {
       const member = await guild.members.fetch(memberId).catch(() => null);
       if (member) {
@@ -337,59 +331,10 @@ client.on("interactionCreate", async (interaction) => {
 
   // -------------------- CLEANNAME --------------------
   if (commandName === "cleanname") {
-    if (!(await isAdmin(interaction))) return interaction.reply({ content: "Not authorized.", ephemeral: true });
-
     const members = await guild.members.fetch();
     members.forEach(m => { if (!m.user.bot) m.setNickname(null).catch(() => {}); });
     return interaction.reply({ content: "✅ All nicknames reset to default.", ephemeral: true });
   }
-
-  // -------------------- CARNUMBERCLAIM --------------------
-if (commandName === "carnumberclaim") {
-  if (!(await isAdmin(interaction))) return interaction.reply({ content: "Not authorized.", ephemeral: true });
-
-  const number = options.getInteger("number");
-  if (!carNumberClaims[league]) carNumberClaims[league] = [];
-  if (carNumberClaims[league].includes(number)) return interaction.reply({ content: `Car number ${number} is already claimed in ${league}!`, ephemeral: true });
-
-  carNumberClaims[league].push(number);
-  saveCarNumberClaims();
-
-  const channel = guild.channels.cache.get("1452244527749533726");
-  if (!channel?.isTextBased()) return interaction.reply({ content: "Claim channel not found.", ephemeral: true });
-
-  // Try to edit the existing embed if exists
-  const lastMsgId = carNumberClaims[`${league}_embed`] || null;
-  const embed = new EmbedBuilder()
-    .setTitle(`${league} Claimed Car Numbers`)
-    .setColor("Blue")
-    .setDescription(carNumberClaims[league].length ? carNumberClaims[league].join(", ") : "No claimed numbers yet.");
-
-  try {
-    if (lastMsgId) {
-      const msg = await channel.messages.fetch(lastMsgId).catch(() => null);
-      if (msg) {
-        await msg.edit({ embeds: [embed] });
-      } else {
-        const msgNew = await channel.send({ embeds: [embed] });
-        carNumberClaims[`${league}_embed`] = msgNew.id;
-        saveCarNumberClaims();
-      }
-    } else {
-      const msgNew = await channel.send({ embeds: [embed] });
-      carNumberClaims[`${league}_embed`] = msgNew.id;
-      saveCarNumberClaims();
-    }
-  } catch (err) {
-    console.error(err);
-    const msgNew = await channel.send({ embeds: [embed] });
-    carNumberClaims[`${league}_embed`] = msgNew.id;
-    saveCarNumberClaims();
-  }
-
-  return interaction.reply({ content: `✅ Car number ${number} claimed for ${league}`, ephemeral: true });
-}
-
 
   // -------------------- REGISTER --------------------
   if (commandName === "register") {
@@ -398,7 +343,7 @@ if (commandName === "carnumberclaim") {
     const flag = options.getString("flag");
 
     if (!flag) return interaction.reply({ content: "Flag is required!", ephemeral: true });
-    if (isCarNumberTaken(league, carNumber, user.id) || carNumberClaims[league].includes(carNumber))
+    if (isCarNumberTaken(league, carNumber, user.id))
       return interaction.reply({ content: `Car number ${carNumber} is already taken in ${league}!`, ephemeral: true });
 
     registrationData[user.id] = { series: league, carnumber: carNumber, username, flag };
@@ -418,23 +363,23 @@ if (commandName === "carnumberclaim") {
     const team = options.getString("team");
     const role = options.getString("role");
 
-    if (!config.teamRoleIds[team]) return interaction.reply({ content: "Invalid team.", ephemeral: true });
-    if (!config.playerRoles[role]) return interaction.reply({ content: "Invalid role.", ephemeral: true });
-    if (countRoleInTeam(league, team, role) >= config.playerRoles[role].max) return interaction.reply({ content: `${role} limit reached in ${team}`, ephemeral: true });
+    if (!config.teamRoleIds[team]) return interaction.reply({ content: "Invalid team", ephemeral: true });
+    if (!config.playerRoles[role]) return interaction.reply({ content: "Invalid role", ephemeral: true });
 
-    assignedPlayers[`${target.id}`] = { team, role };
+    if (countRoleInTeam(league, team, role) >= config.playerRoles[role].max)
+      return interaction.reply({ content: `${role} for ${team} is full!`, ephemeral: true });
+
+    assignedPlayers[target.id] = { team, role };
     saveAssigned(league);
 
-    // Assign actual Discord role
     try {
       const member = await guild.members.fetch(target.id);
-      const roleId = config.playerRoles[role].id;
-      if (member && roleId) member.roles.add(roleId).catch(() => {});
+      if (member) await member.roles.add(config.playerRoles[role].id).catch(() => {});
     } catch {}
 
     updateLiveLineup(guild, league);
-    sendEmbed(guild, "Sign", `<@${target.id}> signed as ${role} in ${team}`, "Green", user.tag, config.updateChannelId);
-    return interaction.reply({ content: `Signed ${target.tag} as ${role} in ${team}`, ephemeral: true });
+    sendEmbed(guild, "SIGN", `<@${target.id}> signed to ${team} as ${role}`, "Green", user.tag, config.updateChannelId);
+    return interaction.reply({ content: `<@${target.id}> signed successfully!`, ephemeral: true });
   }
 
   // -------------------- MOVE --------------------
@@ -443,50 +388,76 @@ if (commandName === "carnumberclaim") {
     const team = options.getString("team");
     const role = options.getString("role");
 
-    if (!assignedPlayers[`${target.id}`]) return interaction.reply({ content: "User not signed yet.", ephemeral: true });
-    if (!config.teamRoleIds[team]) return interaction.reply({ content: "Invalid team.", ephemeral: true });
-    if (!config.playerRoles[role]) return interaction.reply({ content: "Invalid role.", ephemeral: true });
-    if (countRoleInTeam(league, team, role) >= config.playerRoles[role].max) return interaction.reply({ content: `${role} limit reached in ${team}`, ephemeral: true });
+    if (!assignedPlayers[target.id]) return interaction.reply({ content: "User not signed yet", ephemeral: true });
 
-    const oldRoleId = config.playerRoles[assignedPlayers[`${target.id}`].role]?.id;
-    assignedPlayers[`${target.id}`] = { team, role };
+    const oldRole = assignedPlayers[target.id].role;
+    assignedPlayers[target.id] = { team, role };
     saveAssigned(league);
 
     try {
       const member = await guild.members.fetch(target.id);
       if (member) {
-        if (oldRoleId) member.roles.remove(oldRoleId).catch(() => {});
-        member.roles.add(config.playerRoles[role].id).catch(() => {});
+        await member.roles.remove(config.playerRoles[oldRole]?.id).catch(() => {});
+        await member.roles.add(config.playerRoles[role]?.id).catch(() => {});
       }
     } catch {}
 
     updateLiveLineup(guild, league);
-    sendEmbed(guild, "Move", `<@${target.id}> moved to ${role} in ${team}`, "Orange", user.tag, config.updateChannelId);
-    return interaction.reply({ content: `Moved ${target.tag} to ${role} in ${team}`, ephemeral: true });
+    sendEmbed(guild, "MOVE", `<@${target.id}> moved to ${team} as ${role}`, "Orange", user.tag, config.updateChannelId);
+    return interaction.reply({ content: `<@${target.id}> moved successfully!`, ephemeral: true });
   }
 
   // -------------------- RELEASE --------------------
   if (commandName === "release") {
     const target = options.getUser("user");
-    if (!assignedPlayers[`${target.id}`]) return interaction.reply({ content: "User not signed yet.", ephemeral: true });
+    if (!assignedPlayers[target.id]) return interaction.reply({ content: "User not signed", ephemeral: true });
 
-    const oldRoleId = config.playerRoles[assignedPlayers[`${target.id}`].role]?.id;
-    delete assignedPlayers[`${target.id}`];
+    const oldRole = assignedPlayers[target.id].role;
+    delete assignedPlayers[target.id];
     saveAssigned(league);
 
     try {
       const member = await guild.members.fetch(target.id);
-      if (member && oldRoleId) member.roles.remove(oldRoleId).catch(() => {});
+      if (member) await member.roles.remove(config.playerRoles[oldRole]?.id).catch(() => {});
     } catch {}
 
     updateLiveLineup(guild, league);
-    sendEmbed(guild, "Release", `<@${target.id}> released from all roles in ${league}`, "Red", user.tag, config.updateChannelId);
-    return interaction.reply({ content: `Released ${target.tag} from all roles in ${league}`, ephemeral: true });
+    sendEmbed(guild, "RELEASE", `<@${target.id}> released from all bot-assigned roles`, "Red", user.tag, config.updateChannelId);
+    return interaction.reply({ content: `<@${target.id}> released successfully!`, ephemeral: true });
+  }
+
+  // -------------------- PROFILE --------------------
+  if (commandName === "profile") {
+    const target = options.getUser("user") || user;
+    const data = registrationData[target.id];
+    if (!data || data.series !== league) return interaction.reply({ content: "No registration found", ephemeral: true });
+
+    const assigned = getAssignedPlayers(league)[target.id];
+    const embed = new EmbedBuilder()
+      .setTitle(`${target.tag} Profile`)
+      .addFields(
+        { name: "Car Number", value: `${data.carnumber}`, inline: true },
+        { name: "Username", value: data.username, inline: true },
+        { name: "Flag", value: data.flag, inline: true },
+        { name: "Team", value: assigned?.team || "N/A", inline: true },
+        { name: "Role", value: assigned?.role || "N/A", inline: true }
+      )
+      .setColor("Blue")
+      .setTimestamp();
+    return interaction.reply({ embeds: [embed], ephemeral: true });
   }
 
   // -------------------- LINEUPYEAR --------------------
   if (commandName === "lineupyear") {
-    updateLiveLineup(guild, league);
-    return interaction.reply({ content: `${league} lineup updated!`, ephemeral: true });
+    const embed = new EmbedBuilder().setTitle(`${league} Teams Lineup`).setColor("Gold").setTimestamp();
+    for (const team in config.teamRoleIds) {
+      let list = "";
+      for (const [id, val] of Object.entries(getAssignedPlayers(league))) {
+        if (val.team === team) list += `<@${id}> - ${val.role}\n`;
+      }
+      if (!list) list = "No members yet.";
+      embed.addFields({ name: team, value: list });
+    }
+    return interaction.reply({ embeds: [embed], ephemeral: true });
   }
 });
