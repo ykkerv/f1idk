@@ -223,26 +223,26 @@ const updateBackupEmbed = async (guild) => {
     .setColor("Purple")
     .setTimestamp();
 
-  const MAX_FIELD_LENGTH = 1024;
-  const safeString = (str) => (typeof str === "string" ? str : String(str));
+  // Convert assignedPlayers to JSON-style string
+  const f1List = Object.keys(assignedPlayersF1).length
+    ? JSON.stringify(assignedPlayersF1, null, 2)
+    : "{}";
+  const f2List = Object.keys(assignedPlayersF2).length
+    ? JSON.stringify(assignedPlayersF2, null, 2)
+    : "{}";
 
-  const f1List = Object.entries(assignedPlayersF1).length
-    ? Object.entries(assignedPlayersF1)
-        .map(([id, d]) => `<@${id}> - ${safeString(d.team)} (${safeString(d.role)})`)
-        .join("\n")
-        .slice(0, MAX_FIELD_LENGTH)
-    : "No F1 data yet";
+  // Convert car numbers to JSON-style string
+  const carNumbers = {
+    F1: carNumberClaims.F1 || [],
+    F2: carNumberClaims.F2 || []
+  };
+  const carNumberList = JSON.stringify(carNumbers, null, 2);
 
-  const f2List = Object.entries(assignedPlayersF2).length
-    ? Object.entries(assignedPlayersF2)
-        .map(([id, d]) => `<@${id}> - ${safeString(d.team)} (${safeString(d.role)})`)
-        .join("\n")
-        .slice(0, MAX_FIELD_LENGTH)
-    : "No F2 data yet";
-
+  // Add fields as JSON code blocks
   embed.addFields(
-    { name: "F1", value: f1List },
-    { name: "F2", value: f2List }
+    { name: "Assigned Players F1", value: `\`\`\`json\n${f1List}\n\`\`\`` },
+    { name: "Assigned Players F2", value: `\`\`\`json\n${f2List}\n\`\`\`` },
+    { name: "Car Numbers (F1/F2)", value: `\`\`\`json\n${carNumberList}\n\`\`\`` }
   );
 
   try {
@@ -261,6 +261,7 @@ const updateBackupEmbed = async (guild) => {
     console.error("Failed to update backup embed:", err);
   }
 };
+
 
 // ========================
 // DISCORD CLIENT
