@@ -211,49 +211,46 @@ const updateCarNumberEmbed = async (guild) => {
   }
 };
 
-// ========================
-// BACKUP PMO EMBED (1452397713252548638)
-// ========================
 const updateBackupEmbed = async (guild) => {
   const channel = guild.channels.cache.get(backupChannelId);
   if (!channel?.isTextBased()) return;
 
   const embed = new EmbedBuilder()
-    .setTitle("WARL Backup System")
+    .setTitle("WARL Backup Embed (PMO)")
     .setColor("Purple")
     .setTimestamp();
 
-  // Convert assignedPlayers to JSON-style string
   const f1List = Object.keys(assignedPlayersF1).length
     ? JSON.stringify(assignedPlayersF1, null, 2)
     : "{}";
   const f2List = Object.keys(assignedPlayersF2).length
     ? JSON.stringify(assignedPlayersF2, null, 2)
     : "{}";
-
-  // Convert car numbers to JSON-style string
   const carNumbers = { F1: carNumberClaims.F1 || [], F2: carNumberClaims.F2 || [] };
   const carNumberList = JSON.stringify(carNumbers, null, 2);
 
-  // Helper to split long strings into multiple embed fields
-  const chunkString = (str, maxLength = 1024) => {
+  const MAX_FIELD_LENGTH = 1024;
+
+  const chunkAndPrepareFields = (name, str) => {
     const chunks = [];
-    for (let i = 0; i < str.length; i += maxLength) {
-      chunks.push(str.slice(i, i + maxLength));
+    for (let i = 0; i < str.length; i += MAX_FIELD_LENGTH) {
+      chunks.push({
+        name: i === 0 ? name : `${name} (cont.)`,
+        value: `\`\`\`json\n${str.slice(i, i + MAX_FIELD_LENGTH)}\n\`\`\``
+      });
     }
     return chunks;
   };
 
-  const addChunkedFields = (name, str) => {
-    const chunks = chunkString(str, 1024);
-    chunks.forEach((chunk, idx) => {
-      embed.addFields({ name: idx === 0 ? name : `${name} (cont.)`, value: `\`\`\`json\n${chunk}\n\`\`\`` });
-    });
-  };
+  // Combine all fields into a single array before adding
+  const allFields = [
+    ...chunkAndPrepareFields("Assigned Players F1", f1List),
+    ...chunkAndPrepareFields("Assigned Players F2", f2List),
+    ...chunkAndPrepareFields("Car Numbers (F1/F2)", carNumberList)
+  ];
 
-  addChunkedFields("Assigned Players F1", f1List);
-  addChunkedFields("Assigned Players F2", f2List);
-  addChunkedFields("Car Numbers (F1/F2)", carNumberList);
+  // Only add fields if there is at least one
+  if (allFields.length) embed.addFields(allFields);
 
   try {
     if (!global.backupEmbedId) {
@@ -271,6 +268,7 @@ const updateBackupEmbed = async (guild) => {
     console.error("Failed to update backup embed:", err);
   }
 };
+
 
 
 // ========================
