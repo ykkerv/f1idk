@@ -74,7 +74,7 @@ const seriesConfigs = {
       "Reserve Driver F1": { id: "1432739468770541739", max: 2 },
       "Engineer F1": { id: "1432786005106102342", max: 2 }
     },
-    adminRoles: [ "902878740659441674" ],
+    adminRoles: [], // using role check
     updateChannelId: "1432370687888064735",
     liveLineupChannelId: "1432370391929716787"
   },
@@ -97,7 +97,7 @@ const seriesConfigs = {
       "Reserve Driver F2": { id: "1436021153977077771", max: 2 },
       "Engineer F2": { id: "1435197815461642400", max: 2 }
     },
-    adminRoles: [ "902878740659441674" ],
+    adminRoles: [],
     updateChannelId: "1432371785181040640",
     liveLineupChannelId: "1432371611927056544"
   }
@@ -197,7 +197,7 @@ const commands = [
 
   new SlashCommandBuilder().setName("release").setDescription("Release a user from all bot-assigned roles")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
-    .addUserOption(o => o.setName("user").setDescription("User to release").setRequired(true)),
+    .addUserOption(o => o.setName("user").setDescription("User").setRequired(true)),
 
   new SlashCommandBuilder().setName("register").setDescription("Register car number, username, flag (flag required)")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
@@ -218,9 +218,22 @@ const commands = [
 
   new SlashCommandBuilder().setName("cleanname").setDescription("Reset all user nicknames to default (admin only)"),
 
-  new SlashCommandBuilder().setName("carnumberclaim").setDescription("Claim car numbers for a league")
-    .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices)),
+  new SlashCommandBuilder().setName("carnumberclaim").setDescription("Claim car numbers for a league (admin only)")
+    .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
+    .addIntegerOption(o => o.setName("number").setDescription("Car number to claim").setRequired(true))
 ].map(c => c.toJSON());
+
+// ========================
+// ADMIN CHECK
+// ========================
+const isAdmin = async (interaction) => {
+  try {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    return member.roles.cache.has("1432285963287003156");
+  } catch {
+    return false;
+  }
+};
 
 // ========================
 // CLIENT READY
@@ -286,7 +299,7 @@ client.on("interactionCreate", async (interaction) => {
 /lineupyear - Show all teams lineup
 /resetdata - Reset all bot data (admin only)
 /cleanname - Reset all nicknames (admin only)
-/carnumberclaim - Show claimed car numbers
+/carnumberclaim - Claim car numbers (admin only)
 /help - Show this message`,
       ephemeral: true
     });
@@ -294,7 +307,7 @@ client.on("interactionCreate", async (interaction) => {
 
   // -------------------- RESET DATA --------------------
   if (commandName === "resetdata") {
-    if (!config?.adminRoles.includes(user.id)) return interaction.reply({ content: "Not authorized.", ephemeral: true });
+    if (!(await isAdmin(interaction))) return interaction.reply({ content: "Not authorized.", ephemeral: true });
 
     // Remove roles from Discord
     for (const memberId in assignedPlayersF1) {
@@ -323,7 +336,7 @@ client.on("interactionCreate", async (interaction) => {
 
   // -------------------- CLEANNAME --------------------
   if (commandName === "cleanname") {
-    if (!config?.adminRoles.includes(user.id)) return interaction.reply({ content: "Not authorized.", ephemeral: true });
+    if (!(await isAdmin(interaction))) return interaction.reply({ content: "Not authorized.", ephemeral: true });
 
     const members = await guild.members.fetch();
     members.forEach(m => { if (!m.user.bot) m.setNickname(null).catch(() => {}); });
@@ -332,10 +345,25 @@ client.on("interactionCreate", async (interaction) => {
 
   // -------------------- CARNUMBERCLAIM --------------------
   if (commandName === "carnumberclaim") {
-    const list = carNumberClaims[league] || [];
-    const embed = new EmbedBuilder().setTitle(`${league} Claimed Car Numbers`).setColor("Blue")
-      .setDescription(list.length ? list.join(", ") : "No numbers claimed yet.");
-    return interaction.reply({ embeds: [embed], ephemeral: true });
+    if (!(await isAdmin(interaction))) return interaction.reply({ content: "Not authorized.", ephemeral: true });
+
+    const number = options.getInteger("number");
+    if (!carNumberClaims[league]) carNumberClaims[league] = [];
+    if (carNumberClaims[league].includes(number)) return interaction.reply({ content: `Car number ${number} is already claimed in ${league}!`, ephemeral: true });
+
+    carNumberClaims[league].push(number);
+    saveCarNumberClaims();
+
+    const channel = guild.channels.cache.get("1452244527749533726");
+    if (channel?.isTextBased()) {
+      const embed = new EmbedBuilder()
+        .setTitle(`${league} Claimed Car Numbers`)
+        .setColor("Blue")
+        .setDescription(carNumberClaims[league].join(", "));
+      channel.send({ embeds: [embed] }).catch(() => {});
+    }
+
+    return interaction.reply({ content: `✅ Car number ${number} claimed for ${league}`, ephemeral: true });
   }
 
   // -------------------- REGISTER --------------------
