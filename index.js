@@ -213,6 +213,9 @@ const updateCarNumberEmbed = async (guild) => {
 // ========================
 // BACKUP PMO EMBED FIXED
 // ========================
+// ========================
+// BACKUP PMO EMBED (SAFE VERSION)
+// ========================
 const updateBackupEmbed = async (guild) => {
   const channel = guild.channels.cache.get(backupChannelId);
   if (!channel?.isTextBased()) return;
@@ -232,13 +235,20 @@ const updateBackupEmbed = async (guild) => {
   const carNumberList = JSON.stringify(carNumbers, null, 2);
 
   const MAX_FIELD_LENGTH = 1024;
+  const MAX_FIELDS = 25;
 
+  // Split large strings into chunks safely
   const chunkAndPrepareFields = (name, str) => {
+    if (!str) str = "{}"; // fallback
     const chunks = [];
     for (let i = 0; i < str.length; i += MAX_FIELD_LENGTH) {
+      if (chunks.length >= MAX_FIELDS) break; // respect max 25 fields
+      const chunkValue = str.slice(i, i + MAX_FIELD_LENGTH);
+      if (!chunkValue) continue;
       chunks.push({
         name: i === 0 ? name : `${name} (cont.)`,
-        value: `\`\`\`json\n${str.slice(i, i + MAX_FIELD_LENGTH)}\n\`\`\``
+        value: `\`\`\`json\n${chunkValue}\n\`\`\``,
+        inline: false
       });
     }
     return chunks;
@@ -253,6 +263,7 @@ const updateBackupEmbed = async (guild) => {
   if (allFields.length) embed.addFields(allFields);
 
   try {
+    // Send or edit backup embed
     if (!global.backupEmbedId) {
       const msg = await channel.send({ embeds: [embed] });
       global.backupEmbedId = msg.id;
@@ -268,6 +279,7 @@ const updateBackupEmbed = async (guild) => {
     console.error("Failed to update backup embed:", err);
   }
 };
+
 
 // ========================
 // DISCORD CLIENT
