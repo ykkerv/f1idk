@@ -182,9 +182,6 @@ const updateLiveLineup = async (guild, series) => {
   }
 };
 
-// ========================
-// BACKUP PMO EMBED FIXED
-// ========================
 const updateBackupEmbed = async (guild) => {
   const channel = guild.channels.cache.get(backupChannelId);
   if (!channel?.isTextBased()) return;
@@ -194,42 +191,30 @@ const updateBackupEmbed = async (guild) => {
     .setColor("Purple")
     .setTimestamp();
 
-  // Convert assigned players and car numbers to JSON strings
-  const f1Assigned = Object.keys(assignedPlayersF1).length
-    ? JSON.stringify(assignedPlayersF1, null, 2)
-    : "{}";
-  const f2Assigned = Object.keys(assignedPlayersF2).length
-    ? JSON.stringify(assignedPlayersF2, null, 2)
-    : "{}";
+  // --- Assigned Players ---
+  const f1Players = Object.entries(assignedPlayersF1).map(
+    ([uid, val]) => `<@${uid}> - ${val.role} (${val.team})`
+  );
+  embed.addFields({
+    name: "Assigned Players F1",
+    value: f1Players.length ? f1Players.join("\n").slice(0, 1024) : "No players yet."
+  });
 
-  const carNumbers = {
-    F1: carNumberClaims.F1 || [],
-    F2: carNumberClaims.F2 || []
-  };
-  const carNumbersStr = JSON.stringify(carNumbers, null, 2);
+  const f2Players = Object.entries(assignedPlayersF2).map(
+    ([uid, val]) => `<@${uid}> - ${val.role} (${val.team})`
+  );
+  embed.addFields({
+    name: "Assigned Players F2",
+    value: f2Players.length ? f2Players.join("\n").slice(0, 1024) : "No players yet."
+  });
 
-  const MAX_FIELD_LENGTH = 1024;
-
-  // Function to split long strings into multiple fields
-  const chunkAndPrepareFields = (name, str) => {
-    const chunks = [];
-    for (let i = 0; i < str.length; i += MAX_FIELD_LENGTH) {
-      chunks.push({
-        name: i === 0 ? name : `${name} (cont.)`,
-        value: `\`\`\`json\n${str.slice(i, i + MAX_FIELD_LENGTH)}\n\`\`\``
-      });
-    }
-    return chunks;
-  };
-
-  // Add all fields
-  const allFields = [
-    ...chunkAndPrepareFields("Assigned Players F1", f1Assigned),
-    ...chunkAndPrepareFields("Assigned Players F2", f2Assigned),
-    ...chunkAndPrepareFields("Car Numbers (F1/F2)", carNumbersStr)
-  ];
-
-  if (allFields.length) embed.addFields(allFields);
+  // --- Car Numbers ---
+  const carNumbersF1 = (carNumberClaims.F1 || []).map(c => `#${c.number} — <@${c.userId}>`);
+  const carNumbersF2 = (carNumberClaims.F2 || []).map(c => `#${c.number} — <@${c.userId}>`);
+  embed.addFields(
+    { name: "Car Numbers F1", value: carNumbersF1.length ? carNumbersF1.join("\n").slice(0, 1024) : "No car numbers yet." },
+    { name: "Car Numbers F2", value: carNumbersF2.length ? carNumbersF2.join("\n").slice(0, 1024) : "No car numbers yet." }
+  );
 
   try {
     if (!global.backupEmbedId) {
