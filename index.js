@@ -182,6 +182,34 @@ const updateLiveLineup = async (guild, series) => {
   }
 };
 
+const updateCarNumberEmbed = async (guild) => {
+  const channel = guild.channels.cache.get("1452244527749533726");
+  if (!channel?.isTextBased()) return;
+
+  const embed = new EmbedBuilder()
+    .setTitle(`Claimed Car Numbers`)
+    .setColor("Blue")
+    .setTimestamp();
+
+  const MAX_FIELD_LENGTH = 1024;
+  const formatList = (list) => list.length ? list.map(c => `#${c.number} — <@${c.userId}>`).join("\n").slice(0, MAX_FIELD_LENGTH) : "No list yet";
+
+  embed.addFields({ name: "F1", value: formatList(carNumberClaims.F1) }, { name: "F2", value: formatList(carNumberClaims.F2) });
+
+  try {
+    if (!carNumberClaims.embeds) carNumberClaims.embeds = {};
+    if (carNumberClaims.embeds.live) {
+      const msg = await channel.messages.fetch(carNumberClaims.embeds.live).catch(() => null);
+      if (msg) return msg.edit({ embeds: [embed] });
+    }
+    const msg = await channel.send({ embeds: [embed] });
+    carNumberClaims.embeds.live = msg.id;
+    saveCarNumberClaims();
+  } catch (err) {
+    console.error("Failed to update car number embed:", err);
+  }
+};
+
 const updateBackupEmbed = async (guild) => {
   const channel = guild.channels.cache.get(backupChannelId);
   if (!channel?.isTextBased()) return;
@@ -232,7 +260,6 @@ const updateBackupEmbed = async (guild) => {
     console.error("Failed to update backup embed:", err);
   }
 };
-
 
 
 
@@ -461,4 +488,3 @@ try {
 }
 
 });
-
