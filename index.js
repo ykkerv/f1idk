@@ -133,10 +133,8 @@ const sendEmbed = async (guild, title, description, color, executorTag, updateCh
 };
 
 const isCarNumberTaken = (series, number, userId) => {
-  // Check registration data (keyed by ID)
   if (Object.entries(registrationData).some(([uid, data]) => data.series === series && data.carnumber === number && uid !== userId))
     return true;
-  // Check direct claims list (array of objects)
   if (carNumberClaims[series]?.some(c => c.number === number && c.userId !== userId))
     return true;
   return false;
@@ -216,24 +214,12 @@ const updateBackupEmbed = async (guild) => {
     .setColor("Purple")
     .setTimestamp();
 
-  // --- Assigned Players ---
-  const f1Players = Object.entries(assignedPlayersF1).map(
-    ([uid, val]) => `<@${uid}> - ${val.role} (${val.team})`
-  );
-  embed.addFields({
-    name: "Assigned Players F1",
-    value: f1Players.length ? f1Players.join("\n").slice(0, 1024) : "No players yet."
-  });
+  const f1Players = Object.entries(assignedPlayersF1).map(([uid, val]) => `<@${uid}> - ${val.role} (${val.team})`);
+  embed.addFields({ name: "Assigned Players F1", value: f1Players.length ? f1Players.join("\n").slice(0, 1024) : "No players yet." });
 
-  const f2Players = Object.entries(assignedPlayersF2).map(
-    ([uid, val]) => `<@${uid}> - ${val.role} (${val.team})`
-  );
-  embed.addFields({
-    name: "Assigned Players F2",
-    value: f2Players.length ? f2Players.join("\n").slice(0, 1024) : "No players yet."
-  });
+  const f2Players = Object.entries(assignedPlayersF2).map(([uid, val]) => `<@${uid}> - ${val.role} (${val.team})`);
+  embed.addFields({ name: "Assigned Players F2", value: f2Players.length ? f2Players.join("\n").slice(0, 1024) : "No players yet." });
 
-  // --- Car Numbers ---
   const carNumbersF1 = (carNumberClaims.F1 || []).map(c => `#${c.number} — <@${c.userId}>`);
   const carNumbersF2 = (carNumberClaims.F2 || []).map(c => `#${c.number} — <@${c.userId}>`);
   embed.addFields(
@@ -248,10 +234,7 @@ const updateBackupEmbed = async (guild) => {
     } else {
       const msg = await channel.messages.fetch(global.backupEmbedId).catch(() => null);
       if (msg) await msg.edit({ embeds: [embed] });
-      else {
-        const newMsg = await channel.send({ embeds: [embed] });
-        global.backupEmbedId = newMsg.id;
-      }
+      else { const newMsg = await channel.send({ embeds: [embed] }); global.backupEmbedId = newMsg.id; }
     }
   } catch (err) {
     console.error("Failed to update backup embed:", err);
@@ -331,9 +314,7 @@ client.on("interactionCreate", async interaction => {
     if (!config) return interaction.respond([]);
 
     if (["team", "role"].includes(focused.name)) {
-      const choices = focused.name === "team"
-        ? Object.keys(config.teamRoleIds)
-        : Object.keys(config.playerRoles);
+      const choices = focused.name === "team" ? Object.keys(config.teamRoleIds) : Object.keys(config.playerRoles);
       return interaction.respond(choices.map(c => ({ name: c, value: c })).slice(0, 25));
     }
   }
@@ -345,12 +326,8 @@ client.on("interactionCreate", async interaction => {
   const user = interaction.user;
   const executorTag = user.tag;
 
-  // Helper to get series config and assigned players
   const series = interaction.options.getString("league");
-  const config = seriesConfigs[series];
-  // Note: 'series' might be null for commands that don't use it, but here all commands seem to use it except maybe help/reset
-  // We handle invalid series locally inside commands or rely on required=true
-
+  const config = series ? seriesConfigs[series] : null;
   const assigned = series ? getAssignedPlayers(series) : null;
 
   try {
@@ -360,99 +337,69 @@ client.on("interactionCreate", async interaction => {
         const targetUser = interaction.options.getUser("user");
         const team = interaction.options.getString("team");
         const role = interaction.options.getString("role");
-
-        if (!config.teamRoleIds[team] || !config.playerRoles[role]) {
-          return interaction.reply({ content: "Invalid team or role.", ephemeral: true });
-        }
-
+        if (!config.teamRoleIds[team] || !config.playerRoles[role]) return interaction.reply({ content: "Invalid team or role.", ephemeral: true });
         const roleLimit = config.playerRoles[role].max;
         const currentCount = Object.values(assigned).filter(p => p.team === team && p.role === role).length;
         if (currentCount >= roleLimit) return interaction.reply({ content: `${role} role for ${team} is full.`, ephemeral: true });
-
         assigned[targetUser.id] = { team, role };
         saveAssigned(series);
-
         sendEmbed(guild, "Sign", `<@${targetUser.id}> signed to ${team} as ${role}.`, "Green", executorTag, config.updateChannelId);
         await updateLiveLineup(guild, series);
         await updateBackupEmbed(guild);
         return interaction.reply({ content: `<@${targetUser.id}> signed successfully.`, ephemeral: true });
       }
-
       case "move": {
         if (!config) return interaction.reply({ content: "Invalid series.", ephemeral: true });
         const targetUser = interaction.options.getUser("user");
         const team = interaction.options.getString("team");
         const role = interaction.options.getString("role");
-
         if (!assigned[targetUser.id]) return interaction.reply({ content: "User not signed yet.", ephemeral: true });
         assigned[targetUser.id] = { team, role };
         saveAssigned(series);
-
         sendEmbed(guild, "Move", `<@${targetUser.id}> moved to ${team} as ${role}.`, "Orange", executorTag, config.updateChannelId);
         await updateLiveLineup(guild, series);
         await updateBackupEmbed(guild);
         return interaction.reply({ content: `<@${targetUser.id}> moved successfully.`, ephemeral: true });
       }
-
       case "release": {
         if (!config) return interaction.reply({ content: "Invalid series.", ephemeral: true });
         const targetUser = interaction.options.getUser("user");
         if (!assigned[targetUser.id]) return interaction.reply({ content: "User not signed yet.", ephemeral: true });
-
         delete assigned[targetUser.id];
         saveAssigned(series);
-
         sendEmbed(guild, "Release", `<@${targetUser.id}> released from ${series}.`, "Red", executorTag, config.updateChannelId);
         await updateLiveLineup(guild, series);
         await updateBackupEmbed(guild);
         return interaction.reply({ content: `<@${targetUser.id}> released successfully.`, ephemeral: true });
       }
-
       case "register": {
         if (!config) return interaction.reply({ content: "Invalid series.", ephemeral: true });
         const targetUser = user;
         const carNumber = interaction.options.getInteger("carnumber");
         const username = interaction.options.getString("username");
         const flag = interaction.options.getString("flag");
-
         if (isCarNumberTaken(series, carNumber, targetUser.id)) return interaction.reply({ content: "Car number already taken.", ephemeral: true });
-
         registrationData[targetUser.id] = { series, carnumber: carNumber, username, flag };
         saveRegistration();
-
         await updateCarNumberEmbed(guild);
         await updateBackupEmbed(guild);
         return interaction.reply({ content: `Car number #${carNumber} registered successfully!`, ephemeral: true });
       }
-
       case "carnumberclaim": {
         if (!config) return interaction.reply({ content: "Invalid series.", ephemeral: true });
         const numberToClaim = interaction.options.getInteger("number");
-
-        if (isCarNumberTaken(series, numberToClaim, user.id)) {
-          return interaction.reply({ content: `Car number #${numberToClaim} is already taken in ${series}.`, ephemeral: true });
-        }
-
+        if (isCarNumberTaken(series, numberToClaim, user.id)) return interaction.reply({ content: `Car number #${numberToClaim} is already taken in ${series}.`, ephemeral: true });
         if (!carNumberClaims[series]) carNumberClaims[series] = [];
-        
-        // Remove previous claim by this user in this series if you only want 1 claim per user
-        // (Optional: if you want to allow multiple claims, remove this filter line)
         carNumberClaims[series] = carNumberClaims[series].filter(c => c.userId !== user.id);
-
         carNumberClaims[series].push({ number: numberToClaim, userId: user.id });
         saveCarNumberClaims();
-
         await updateCarNumberEmbed(guild);
         await updateBackupEmbed(guild);
-
         return interaction.reply({ content: `Successfully claimed car number #${numberToClaim} for ${series}.`, ephemeral: true });
       }
-
       case "profile": {
         const targetUser = interaction.options.getUser("user") || user;
         const reg = registrationData[targetUser.id];
-        // Note: assigned depends on 'series', but profile doesn't strictly need league input if we search both,
-        // however the command requires 'league'.
         if (!assigned) return interaction.reply({ content: "Please specify a league.", ephemeral: true });
         const assign = assigned[targetUser.id];
         const profileEmbed = new EmbedBuilder()
@@ -467,10 +414,8 @@ client.on("interactionCreate", async interaction => {
             { name: "Flag", value: reg?.flag || "-", inline: true }
           )
           .setTimestamp();
-
         return interaction.reply({ embeds: [profileEmbed], ephemeral: true });
       }
-
       case "lineupyear": {
         if (!config) return interaction.reply({ content: "Invalid series.", ephemeral: true });
         const embed = new EmbedBuilder().setTitle(`${series} Teams Lineup`).setColor("Gold").setTimestamp();
@@ -483,28 +428,18 @@ client.on("interactionCreate", async interaction => {
         }
         return interaction.reply({ embeds: [embed], ephemeral: false });
       }
-
-      case "help": {
-        return interaction.reply({
-          content: `Available commands: /sign, /move, /release, /register, /carnumberclaim, /profile, /lineupyear, /resetdata`,
-          ephemeral: true
-        });
-      }
-
-      case "resetdata": {
+      case "help":
+        return interaction.reply({ content: `Available commands: /sign, /move, /release, /register, /carnumberclaim, /profile, /lineupyear, /resetdata`, ephemeral: true });
+      case "resetdata":
         if (user.id !== process.env.ADMIN_ID) return interaction.reply({ content: "Not authorized.", ephemeral: true });
-
         assignedPlayersF1 = {};
         assignedPlayersF2 = {};
         registrationData = {};
         liveLineupIds = { F1: null, F2: null };
         carNumberClaims = { F1: [], F2: [], embeds: {} };
-
         saveAssignedF1(); saveAssignedF2(); saveRegistration(); saveLiveEmbedIds(); saveCarNumberClaims();
         await client.guilds.cache.forEach(g => { updateLiveLineup(g, "F1"); updateLiveLineup(g, "F2"); updateCarNumberEmbed(g); updateBackupEmbed(g); });
         return interaction.reply({ content: "All data has been reset.", ephemeral: true });
-      }
-
       default:
         return interaction.reply({ content: "Unknown command.", ephemeral: true });
     }
@@ -512,5 +447,8 @@ client.on("interactionCreate", async interaction => {
     console.error(err);
     return interaction.reply({ content: "Error executing command.", ephemeral: true });
   }
-
 });
+
+// ========================
+// FULL CODE - DATA 23 READ THIS IF YOU UNDERSTOOD THE ASSIGMENT
+// ========================
