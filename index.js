@@ -33,12 +33,94 @@ const paths = {
     carClaims: path.join(dataDir, "carNumberClaims.json")
 };
 
-// Initial state
-let assignedPlayersF1 = {};
-let assignedPlayersF2 = {};
-let registrationData = {};
-let liveLineupIds = { F1: null, F2: null };
-let carNumberClaims = { F1: [], F2: [] };
+// ========================
+// DEFAULT DATA (Your Provided Data)
+// ========================
+const DEFAULTS = {
+    assignedF1: {
+        "1153396013009215591": { "team": "McLaren F1 team", "role": "Team Principal F1" },
+        "663160900877811738": { "team": "McLaren F1 team", "role": "Main Driver F1" },
+        "1176937840278507632": { "team": "McLaren F1 team", "role": "Main Driver F1" },
+        "902878740659441674": { "team": "McLaren F1 team", "role": "Reserve Driver F1" },
+        "1119501208713961523": { "team": "McLaren F1 team", "role": "Engineer F1" },
+        "518740889191841803": { "team": "Mercedes-AMG PETRONAS F1 team", "role": "Main Driver F1" },
+        "1439601182786978005": { "team": "Mercedes-AMG PETRONAS F1 team", "role": "Main Driver F1" },
+        "1364145921977225307": { "team": "Mercedes-AMG PETRONAS F1 team", "role": "Team Principal F1" },
+        "1336279717778690138": { "team": "Oracle Red Bull Racing F1 team", "role": "Main Driver F1" },
+        "1363528232615280906": { "team": "Oracle Red Bull Racing F1 team", "role": "Reserve Driver F1" },
+        "917703934192275517": { "team": "Oracle Red Bull Racing F1 team", "role": "Engineer F1" },
+        "1170790804554530828": { "team": "Scuderia Ferrari F1 team", "role": "Main Driver F1" },
+        "1298178343052513330": { "team": "Scuderia Ferrari F1 team", "role": "Main Driver F1" },
+        "1190909698220761098": { "team": "MoneyGram Haas F1 team", "role": "Main Driver F1" },
+        "1040179360868597781": { "team": "Williams Racing F1 team", "role": "Main Driver F1" },
+        "1186752653464707102": { "team": "BWT Alpine F1 team", "role": "Main Driver F1" },
+        "749968335168471061": { "team": "Visa Cash App Racing Bulls F1 team", "role": "Main Driver F1" },
+        "771932278079094816": { "team": "Visa Cash App Racing Bulls F1 team", "role": "Main Driver F1" },
+        "975250844758982717": { "team": "Visa Cash App Racing Bulls F1 team", "role": "Reserve Driver F1" },
+        "814540938789650434": { "team": "Visa Cash App Racing Bulls F1 team", "role": "Engineer F1" },
+        "737724257383219220": { "team": "Aston Martin Aramco F1 team", "role": "Reserve Driver F1" },
+        "1185826673854259200": { "team": "Aston Martin Aramco F1 team", "role": "Main Driver F1" },
+        "1424046314492002367": { "team": "Aston Martin Aramco F1 team", "role": "Team Principal F1" },
+        "940298559717249025": { "team": "Aston Martin Aramco F1 team", "role": "Main Driver F1" }
+    },
+    assignedF2: {
+        "1111913693907795970": { "team": "McLaren F2 team", "role": "Reserve Driver F2" },
+        "1170790804554530828": { "team": "McLaren F2 team", "role": "Main Driver F2" },
+        "1153396013009215591": { "team": "McLaren F2 team", "role": "Team Principal F2" },
+        "940298559717249025": { "team": "McLaren F2 team", "role": "Main Driver F2" },
+        "1439601182786978005": { "team": "Mercedes-AMG PETRONAS F2 team", "role": "Team Principal F2" },
+        "902878740659441674": { "team": "Mercedes-AMG PETRONAS F2 team", "role": "Main Driver F2" },
+        "1040179360868597781": { "team": "Mercedes-AMG PETRONAS F2 team", "role": "Main Driver F2" },
+        "1364145921977225307": { "team": "Mercedes-AMG PETRONAS F2 team", "role": "Reserve Driver F2" },
+        "1336279717778690138": { "team": "Oracle Red Bull Racing F2 team", "role": "Team Principal F2" },
+        "1238085761727860766": { "team": "Oracle Red Bull Racing F2 team", "role": "Main Driver F2" },
+        "1153255596867452938": { "team": "Oracle Red Bull Racing F2 team", "role": "Main Driver F2" },
+        "917703934192275517": { "team": "Oracle Red Bull Racing F2 team", "role": "Engineer F2" },
+        "794170362815971348": { "team": "Scuderia Ferrari F2 team", "role": "Team Principal F2" },
+        "1232988113949822992": { "team": "Scuderia Ferrari F2 team", "role": "Main Driver F2" },
+        "663160900877811738": { "team": "Scuderia Ferrari F2 team", "role": "Main Driver F2" },
+        "1434220317789786215": { "team": "Scuderia Ferrari F2 team", "role": "Reserve Driver F2" },
+        "518740889191841803": { "team": "Visa Cash App Racing Bulls F2 team", "role": "Main Driver F2" },
+        "1186752653464707102": { "team": "BWT Alpine F2 team", "role": "Main Driver F2" },
+        "1185826673854259200": { "team": "Williams Racing F2 team", "role": "Main Driver F2" },
+        "1363291837581885573": { "team": "Williams Racing F2 team", "role": "Main Driver F2" },
+        "1424046314492002367": { "team": "Aston Martin Aramco F2 team", "role": "Team Principal F2" },
+        "737724257383219220": { "team": "Aston Martin Aramco F2 team", "role": "Main Driver F2" },
+        "771932278079094816": { "team": "Aston Martin Aramco F2 team", "role": "Main Driver F2" },
+        "1190909698220761098": { "team": "Stake F2 team Kick Sauber", "role": "Team Principal F2" }
+    },
+    carClaims: {
+        "F1": [
+            { "number": 81, "userId": "902878740659441674" },
+            { "number": 13, "userId": "1186752653464707102" },
+            { "number": 25, "userId": "1185826673854259200" },
+            { "number": 69, "userId": "1170790804554530828" },
+            { "number": 5, "userId": "771932278079094816" },
+            { "number": 8, "userId": "940298559717249025" },
+            { "number": 1, "userId": "518740889191841803" }
+        ],
+        "F2": [
+            { "number": 1, "userId": "902878740659441674" },
+            { "number": 6, "userId": "1434220317789786215" },
+            { "number": 13, "userId": "1186752653464707102" },
+            { "number": 3, "userId": "1185826673854259200" },
+            { "number": 5, "userId": "771932278079094816" },
+            { "number": 8, "userId": "940298559717249025" }
+        ]
+    },
+    liveLineup: {
+        "F1": "1452400029078913155",
+        "F2": "1452400031377395722"
+    },
+    registration: {}
+};
+
+// Initial state - LOAD DEFAULTS IMMEDIATELY
+let assignedPlayersF1 = JSON.parse(JSON.stringify(DEFAULTS.assignedF1));
+let assignedPlayersF2 = JSON.parse(JSON.stringify(DEFAULTS.assignedF2));
+let registrationData = JSON.parse(JSON.stringify(DEFAULTS.registration));
+let liveLineupIds = JSON.parse(JSON.stringify(DEFAULTS.liveLineup));
+let carNumberClaims = JSON.parse(JSON.stringify(DEFAULTS.carClaims));
 
 // ========================
 // CRASH PREVENTION
@@ -85,19 +167,17 @@ const saveData = async (reason) => {
 const loadData = async () => {
     console.log("🔄 Starting Data Load...");
     
-    // 1. Try Local Files First
+    // 1. Try Local Files First (If they exist on server)
     try {
-        if (fs.existsSync(paths.assignedF1)) {
-            assignedPlayersF1 = JSON.parse(fs.readFileSync(paths.assignedF1, 'utf8'));
-            assignedPlayersF2 = JSON.parse(fs.readFileSync(paths.assignedF2, 'utf8'));
-            registrationData = JSON.parse(fs.readFileSync(paths.registration, 'utf8'));
-            liveLineupIds = JSON.parse(fs.readFileSync(paths.liveLineup, 'utf8'));
-            carNumberClaims = JSON.parse(fs.readFileSync(paths.carClaims, 'utf8'));
-            console.log("✅ Data loaded from local disk.");
-        }
-    } catch (e) { console.log("Local files missing/empty."); }
+        if (fs.existsSync(paths.assignedF1)) assignedPlayersF1 = JSON.parse(fs.readFileSync(paths.assignedF1, 'utf8'));
+        if (fs.existsSync(paths.assignedF2)) assignedPlayersF2 = JSON.parse(fs.readFileSync(paths.assignedF2, 'utf8'));
+        if (fs.existsSync(paths.registration)) registrationData = JSON.parse(fs.readFileSync(paths.registration, 'utf8'));
+        if (fs.existsSync(paths.liveLineup)) liveLineupIds = JSON.parse(fs.readFileSync(paths.liveLineup, 'utf8'));
+        if (fs.existsSync(paths.carClaims)) carNumberClaims = JSON.parse(fs.readFileSync(paths.carClaims, 'utf8'));
+        console.log("✅ Data checked from local disk.");
+    } catch (e) { console.log("Local files missing or invalid, keeping defaults."); }
 
-    // 2. Restore from Discord (Crucial for Render restarts)
+    // 2. Restore from Discord (Highest Priority for persistence)
     try {
         const channel = await client.channels.fetch(BACKUP_CHANNEL_ID);
         if (!channel?.isTextBased()) return;
@@ -109,11 +189,12 @@ const loadData = async () => {
             const response = await fetch(backupMsg.attachments.first().url);
             const data = await response.json();
 
-            assignedPlayersF1 = data.assignedPlayersF1 || {};
-            assignedPlayersF2 = data.assignedPlayersF2 || {};
-            registrationData = data.registrationData || {};
-            liveLineupIds = data.liveLineupIds || { F1: null, F2: null };
-            carNumberClaims = data.carNumberClaims || { F1: [], F2: [] };
+            // Only overwrite if data exists in backup
+            if(data.assignedPlayersF1) assignedPlayersF1 = data.assignedPlayersF1;
+            if(data.assignedPlayersF2) assignedPlayersF2 = data.assignedPlayersF2;
+            if(data.registrationData) registrationData = data.registrationData;
+            if(data.liveLineupIds) liveLineupIds = data.liveLineupIds;
+            if(data.carNumberClaims) carNumberClaims = data.carNumberClaims;
 
             // Write them back to local files so they exist physically
             fs.writeFileSync(paths.assignedF1, JSON.stringify(assignedPlayersF1, null, 2));
@@ -122,10 +203,10 @@ const loadData = async () => {
             fs.writeFileSync(paths.liveLineup, JSON.stringify(liveLineupIds, null, 2));
             fs.writeFileSync(paths.carClaims, JSON.stringify(carNumberClaims, null, 2));
 
-            console.log("♻️ Data restored from Discord Backup to Local Files.");
+            console.log("♻️ Data restored from Discord Backup.");
         }
     } catch (err) {
-        console.error("Backup Restore Failed:", err);
+        console.error("Backup Restore Failed (Using Defaults):", err);
     }
 };
 
@@ -202,7 +283,13 @@ const countRoleInTeam = (series, team, role) => {
 };
 
 const isCarNumberTaken = (series, number, userId) => {
-  return Object.entries(registrationData).some(([uid, data]) => data.series === series && data.carnumber === number && uid !== userId);
+  // Check registration data
+  const regTaken = Object.entries(registrationData).some(([uid, data]) => data.series === series && data.carnumber === number && uid !== userId);
+  
+  // Check claims file (Structure: Array of objects {number, userId})
+  const claimTaken = carNumberClaims[series]?.some(c => c.number === number);
+
+  return regTaken || claimTaken;
 };
 
 const updateLiveLineup = async (guild, series) => {
@@ -363,10 +450,15 @@ client.on("interactionCreate", async interaction => {
 
       if (commandName === "resetdata") {
         if (!(await isAdmin(interaction))) return interaction.editReply({ content: "Not authorized." });
-        assignedPlayersF1 = {}; assignedPlayersF2 = {}; registrationData = {};
-        liveLineupIds = { F1: null, F2: null }; carNumberClaims = { F1: [], F2: [] };
+        // Reset to Defaults instead of empty
+        assignedPlayersF1 = JSON.parse(JSON.stringify(DEFAULTS.assignedF1));
+        assignedPlayersF2 = JSON.parse(JSON.stringify(DEFAULTS.assignedF2));
+        registrationData = {};
+        liveLineupIds = JSON.parse(JSON.stringify(DEFAULTS.liveLineup));
+        carNumberClaims = JSON.parse(JSON.stringify(DEFAULTS.carClaims));
+        
         await saveData("ResetData");
-        return interaction.editReply({ content: "✅ All data reset locally and in backup!" });
+        return interaction.editReply({ content: "✅ All data reset to default state!" });
       }
 
       if (commandName === "cleanname") {
@@ -379,9 +471,17 @@ client.on("interactionCreate", async interaction => {
       if (commandName === "carnumberclaim") {
         if (!(await isAdmin(interaction))) return interaction.editReply({ content: "Not authorized." });
         const number = options.getInteger("number");
+        
         if (!carNumberClaims[league]) carNumberClaims[league] = [];
-        if (carNumberClaims[league].includes(number)) return interaction.editReply({ content: `Number ${number} already claimed!` });
-        carNumberClaims[league].push(number);
+        
+        // Fix: Check object structure
+        if (carNumberClaims[league].some(c => c.number === number)) {
+            return interaction.editReply({ content: `Number ${number} already claimed!` });
+        }
+        
+        // Fix: Push object structure
+        carNumberClaims[league].push({ number: number, userId: "ADMIN_CLAIM" });
+        
         await saveData("CarClaim");
         return interaction.editReply({ content: `✅ Car number ${number} claimed for ${league}` });
       }
@@ -390,8 +490,10 @@ client.on("interactionCreate", async interaction => {
         const carNumber = options.getInteger("carnumber");
         const username = options.getString("username");
         const flag = options.getString("flag");
-        if (isCarNumberTaken(league, carNumber, user.id) || (carNumberClaims[league]?.includes(carNumber)))
+        
+        if (isCarNumberTaken(league, carNumber, user.id))
           return interaction.editReply({ content: `Car number ${carNumber} is taken!` });
+        
         registrationData[user.id] = { series: league, carnumber: carNumber, username, flag };
         await saveData("Register");
         try {
