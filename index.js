@@ -34,7 +34,7 @@ const paths = {
 };
 
 // ========================
-// DEFAULT DATA (Your Provided Data)
+// 🛑 DEFAULT DATA (Hardcoded for Render Persistence) 🛑
 // ========================
 const DEFAULTS = {
     assignedF1: {
@@ -115,7 +115,9 @@ const DEFAULTS = {
     registration: {}
 };
 
-// Initial state - LOAD DEFAULTS IMMEDIATELY
+// ========================
+// INITIAL STATE (LOADS DEFAULTS FIRST)
+// ========================
 let assignedPlayersF1 = JSON.parse(JSON.stringify(DEFAULTS.assignedF1));
 let assignedPlayersF2 = JSON.parse(JSON.stringify(DEFAULTS.assignedF2));
 let registrationData = JSON.parse(JSON.stringify(DEFAULTS.registration));
@@ -167,17 +169,7 @@ const saveData = async (reason) => {
 const loadData = async () => {
     console.log("🔄 Starting Data Load...");
     
-    // 1. Try Local Files First (If they exist on server)
-    try {
-        if (fs.existsSync(paths.assignedF1)) assignedPlayersF1 = JSON.parse(fs.readFileSync(paths.assignedF1, 'utf8'));
-        if (fs.existsSync(paths.assignedF2)) assignedPlayersF2 = JSON.parse(fs.readFileSync(paths.assignedF2, 'utf8'));
-        if (fs.existsSync(paths.registration)) registrationData = JSON.parse(fs.readFileSync(paths.registration, 'utf8'));
-        if (fs.existsSync(paths.liveLineup)) liveLineupIds = JSON.parse(fs.readFileSync(paths.liveLineup, 'utf8'));
-        if (fs.existsSync(paths.carClaims)) carNumberClaims = JSON.parse(fs.readFileSync(paths.carClaims, 'utf8'));
-        console.log("✅ Data checked from local disk.");
-    } catch (e) { console.log("Local files missing or invalid, keeping defaults."); }
-
-    // 2. Restore from Discord (Highest Priority for persistence)
+    // 1. Restore from Discord (Backup takes priority over Defaults)
     try {
         const channel = await client.channels.fetch(BACKUP_CHANNEL_ID);
         if (!channel?.isTextBased()) return;
@@ -189,14 +181,14 @@ const loadData = async () => {
             const response = await fetch(backupMsg.attachments.first().url);
             const data = await response.json();
 
-            // Only overwrite if data exists in backup
-            if(data.assignedPlayersF1) assignedPlayersF1 = data.assignedPlayersF1;
-            if(data.assignedPlayersF2) assignedPlayersF2 = data.assignedPlayersF2;
-            if(data.registrationData) registrationData = data.registrationData;
-            if(data.liveLineupIds) liveLineupIds = data.liveLineupIds;
-            if(data.carNumberClaims) carNumberClaims = data.carNumberClaims;
+            // Overwrite variables ONLY if backup data exists
+            if (data.assignedPlayersF1) assignedPlayersF1 = data.assignedPlayersF1;
+            if (data.assignedPlayersF2) assignedPlayersF2 = data.assignedPlayersF2;
+            if (data.registrationData) registrationData = data.registrationData;
+            if (data.liveLineupIds) liveLineupIds = data.liveLineupIds;
+            if (data.carNumberClaims) carNumberClaims = data.carNumberClaims;
 
-            // Write them back to local files so they exist physically
+            // Update local files to match
             fs.writeFileSync(paths.assignedF1, JSON.stringify(assignedPlayersF1, null, 2));
             fs.writeFileSync(paths.assignedF2, JSON.stringify(assignedPlayersF2, null, 2));
             fs.writeFileSync(paths.registration, JSON.stringify(registrationData, null, 2));
@@ -204,6 +196,8 @@ const loadData = async () => {
             fs.writeFileSync(paths.carClaims, JSON.stringify(carNumberClaims, null, 2));
 
             console.log("♻️ Data restored from Discord Backup.");
+        } else {
+            console.log("⚠️ No Discord backup found. Using DEFAULTS.");
         }
     } catch (err) {
         console.error("Backup Restore Failed (Using Defaults):", err);
@@ -283,10 +277,10 @@ const countRoleInTeam = (series, team, role) => {
 };
 
 const isCarNumberTaken = (series, number, userId) => {
-  // Check registration data
+  // 1. Check active registrations
   const regTaken = Object.entries(registrationData).some(([uid, data]) => data.series === series && data.carnumber === number && uid !== userId);
   
-  // Check claims file (Structure: Array of objects {number, userId})
+  // 2. Check claim list (Array of objects {number, userId})
   const claimTaken = carNumberClaims[series]?.some(c => c.number === number);
 
   return regTaken || claimTaken;
@@ -312,8 +306,10 @@ const updateLiveLineup = async (guild, series) => {
   try {
     if (liveLineupIds[series]) {
       const msg = await channel.messages.fetch(liveLineupIds[series]).catch(() => null);
-      if (msg) await msg.edit({ embeds: [embed] });
-      else {
+      if (msg) {
+          await msg.edit({ embeds: [embed] });
+      } else {
+          // Message ID exists in DB but not in channel (deleted), send new
           const newMsg = await channel.send({ embeds: [embed] });
           liveLineupIds[series] = newMsg.id;
           await saveData("FixLiveEmbed");
@@ -395,7 +391,12 @@ const isAdmin = async (interaction) => {
 client.once("ready", async () => {
   console.log(`Bot Active: ${client.user.tag}`);
   
+  // Attempt to load from Discord first. 
+  // If that fails, the variables are ALREADY populated with your DEFAULTS.
   await loadData(); 
+
+  // Force a "Fresh" save to Discord to ensure the defaults are backed up if the channel is empty
+  setTimeout(() => saveData("StartupSync"), 5000);
 
   setInterval(async () => {
     try { await fetch("https://cronitor.link/p/5228af7c42f54ba681f4b7c436c08f1b/luqCyv"); } catch(e) {}
@@ -450,7 +451,8 @@ client.on("interactionCreate", async interaction => {
 
       if (commandName === "resetdata") {
         if (!(await isAdmin(interaction))) return interaction.editReply({ content: "Not authorized." });
-        // Reset to Defaults instead of empty
+        
+        // Reset to DEFAULTS, not empty objects
         assignedPlayersF1 = JSON.parse(JSON.stringify(DEFAULTS.assignedF1));
         assignedPlayersF2 = JSON.parse(JSON.stringify(DEFAULTS.assignedF2));
         registrationData = {};
@@ -458,7 +460,7 @@ client.on("interactionCreate", async interaction => {
         carNumberClaims = JSON.parse(JSON.stringify(DEFAULTS.carClaims));
         
         await saveData("ResetData");
-        return interaction.editReply({ content: "✅ All data reset to default state!" });
+        return interaction.editReply({ content: "✅ All data reset to DEFAULT state!" });
       }
 
       if (commandName === "cleanname") {
@@ -474,12 +476,12 @@ client.on("interactionCreate", async interaction => {
         
         if (!carNumberClaims[league]) carNumberClaims[league] = [];
         
-        // Fix: Check object structure
+        // Check for existing claim (Object array structure)
         if (carNumberClaims[league].some(c => c.number === number)) {
             return interaction.editReply({ content: `Number ${number} already claimed!` });
         }
         
-        // Fix: Push object structure
+        // Add new claim
         carNumberClaims[league].push({ number: number, userId: "ADMIN_CLAIM" });
         
         await saveData("CarClaim");
