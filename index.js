@@ -14,24 +14,26 @@ import {
     SlashCommandBuilder, 
     EmbedBuilder, 
     AttachmentBuilder,
-    MessageFlags // <--- IMPORTED TO FIX DEPRECATION WARNING
+    MessageFlags 
 } from "discord.js";
 
 // --- CONFIGURATION ---
-const BACKUP_CHANNEL_ID = "1452397713252548638"; // Your record channel
-const dataDir = "./data";
+const BACKUP_CHANNEL_ID = "1452397713252548638"; 
+const dataDir = path.join(process.cwd(), "data");
 
 // Ensure data dir exists
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
 
 // File Paths
-const assignedFileF1 = path.join(dataDir, "assignedPlayersF1.json");
-const assignedFileF2 = path.join(dataDir, "assignedPlayersF2.json");
-const registrationFile = path.join(dataDir, "registrationData.json");
-const liveEmbedFile = path.join(dataDir, "liveLineup.json");
-const carNumberClaimFile = path.join(dataDir, "carNumberClaims.json");
+const paths = {
+    assignedF1: path.join(dataDir, "assignedPlayersF1.json"),
+    assignedF2: path.join(dataDir, "assignedPlayersF2.json"),
+    registration: path.join(dataDir, "registrationData.json"),
+    liveLineup: path.join(dataDir, "liveLineup.json"),
+    carClaims: path.join(dataDir, "carNumberClaims.json")
+};
 
-// Initial empty state
+// Initial state
 let assignedPlayersF1 = {};
 let assignedPlayersF2 = {};
 let registrationData = {};
@@ -39,95 +41,93 @@ let liveLineupIds = { F1: null, F2: null };
 let carNumberClaims = { F1: [], F2: [] };
 
 // ========================
-// CRASH PREVENTION (THE FIX)
+// CRASH PREVENTION
 // ========================
-// This prevents the bot from dying if Discord API throws a 10062 error
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Checking Unhandled Rejection:', reason);
-});
-process.on('uncaughtException', (err) => {
-    console.error('Checking Uncaught Exception:', err);
-});
+process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:', reason));
+process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 
 // ========================
 // DATA PERSISTENCE
 // ========================
-// ========================
-// REFINED DATA HELPERS
-// ========================
 
-const saveData = async (type) => {
-    // 1. Physically write to the local files first
-    // This ensures your local folder stays updated
+const saveData = async (reason) => {
     try {
-        fs.writeFileSync(assignedFileF1, JSON.stringify(assignedPlayersF1, null, 2));
-        fs.writeFileSync(assignedFileF2, JSON.stringify(assignedPlayersF2, null, 2));
-        fs.writeFileSync(registrationFile, JSON.stringify(registrationData, null, 2));
-        fs.writeFileSync(carNumberClaimFile, JSON.stringify(carNumberClaims, null, 2));
-        fs.writeFileSync(liveEmbedFile, JSON.stringify(liveLineupIds, null, 2));
-    } catch (err) {
-        console.error("Local write failed:", err);
-    }
+        // 1. Physical Write to Local Files
+        fs.writeFileSync(paths.assignedF1, JSON.stringify(assignedPlayersF1, null, 2));
+        fs.writeFileSync(paths.assignedF2, JSON.stringify(assignedPlayersF2, null, 2));
+        fs.writeFileSync(paths.registration, JSON.stringify(registrationData, null, 2));
+        fs.writeFileSync(paths.liveLineup, JSON.stringify(liveLineupIds, null, 2));
+        fs.writeFileSync(paths.carClaims, JSON.stringify(carNumberClaims, null, 2));
 
-    // 2. Prepare the backup for Discord (Long-term storage)
-    const masterBackup = {
-        assignedPlayersF1,
-        assignedPlayersF2,
-        registrationData,
-        liveLineupIds,
-        carNumberClaims,
-        timestamp: new Date().toISOString()
-    };
+        console.log(`💾 Local Files Updated: ${reason}`);
 
-    // 3. Send to Discord
-    try {
+        // 2. Backup to Discord
+        const masterBackup = {
+            assignedPlayersF1, assignedPlayersF2,
+            registrationData, liveLineupIds, carNumberClaims,
+            lastUpdate: new Date().toISOString()
+        };
+
         const channel = await client.channels.fetch(BACKUP_CHANNEL_ID);
         if (channel?.isTextBased()) {
-            const buffer = Buffer.from(JSON.stringify(masterBackup, null, 2), 'utf-8');
+            const buffer = Buffer.from(JSON.stringify(masterBackup, null, 2));
             const attachment = new AttachmentBuilder(buffer, { name: 'backup_data.json' });
             await channel.send({ 
-                content: `💾 Syncing local files to cloud [${type}]`, 
+                content: `🚀 Data Sync [${reason}]`, 
                 files: [attachment] 
             });
         }
     } catch (err) {
-        console.error("Discord backup failed:", err);
+        console.error("Save Error:", err);
     }
 };
 
-const loadDataFromDiscord = async () => {
-    console.log("🔄 Restoring local files from Discord Backup...");
+const loadData = async () => {
+    console.log("🔄 Starting Data Load...");
+    
+    // 1. Try Local Files First
+    try {
+        if (fs.existsSync(paths.assignedF1)) {
+            assignedPlayersF1 = JSON.parse(fs.readFileSync(paths.assignedF1, 'utf8'));
+            assignedPlayersF2 = JSON.parse(fs.readFileSync(paths.assignedF2, 'utf8'));
+            registrationData = JSON.parse(fs.readFileSync(paths.registration, 'utf8'));
+            liveLineupIds = JSON.parse(fs.readFileSync(paths.liveLineup, 'utf8'));
+            carNumberClaims = JSON.parse(fs.readFileSync(paths.carClaims, 'utf8'));
+            console.log("✅ Data loaded from local disk.");
+        }
+    } catch (e) { console.log("Local files missing/empty."); }
+
+    // 2. Restore from Discord (Crucial for Render restarts)
     try {
         const channel = await client.channels.fetch(BACKUP_CHANNEL_ID);
         if (!channel?.isTextBased()) return;
 
-        const messages = await channel.messages.fetch({ limit: 10 });
+        const messages = await channel.messages.fetch({ limit: 5 });
         const backupMsg = messages.find(m => m.attachments.size > 0);
 
         if (backupMsg) {
             const response = await fetch(backupMsg.attachments.first().url);
             const data = await response.json();
 
-            // Load into memory
             assignedPlayersF1 = data.assignedPlayersF1 || {};
             assignedPlayersF2 = data.assignedPlayersF2 || {};
             registrationData = data.registrationData || {};
             liveLineupIds = data.liveLineupIds || { F1: null, F2: null };
             carNumberClaims = data.carNumberClaims || { F1: [], F2: [] };
 
-            // 4. IMPORTANT: Write these back to the files so data/assignedPlayersF1.json exists
-            fs.writeFileSync(assignedFileF1, JSON.stringify(assignedPlayersF1, null, 2));
-            fs.writeFileSync(assignedFileF2, JSON.stringify(assignedPlayersF2, null, 2));
-            fs.writeFileSync(registrationFile, JSON.stringify(registrationData, null, 2));
-            fs.writeFileSync(carNumberClaimFile, JSON.stringify(carNumberClaims, null, 2));
-            
-            console.log("✅ Local files in /data/ have been restored and are ready to use.");
+            // Write them back to local files so they exist physically
+            fs.writeFileSync(paths.assignedF1, JSON.stringify(assignedPlayersF1, null, 2));
+            fs.writeFileSync(paths.assignedF2, JSON.stringify(assignedPlayersF2, null, 2));
+            fs.writeFileSync(paths.registration, JSON.stringify(registrationData, null, 2));
+            fs.writeFileSync(paths.liveLineup, JSON.stringify(liveLineupIds, null, 2));
+            fs.writeFileSync(paths.carClaims, JSON.stringify(carNumberClaims, null, 2));
+
+            console.log("♻️ Data restored from Discord Backup to Local Files.");
         }
     } catch (err) {
-        console.error("Failed to restore local files:", err);
+        console.error("Backup Restore Failed:", err);
     }
 };
-
 
 // ========================
 // F1/F2 CONFIG
@@ -179,11 +179,11 @@ const seriesConfigs = {
   }
 };
 
-const getAssignedPlayers = (series) => series === "F1" ? assignedPlayersF1 : assignedPlayersF2;
-
 // ========================
 // HELPERS
 // ========================
+const getAssignedPlayers = (series) => series === "F1" ? assignedPlayersF1 : assignedPlayersF2;
+
 const sendEmbed = async (guild, title, description, color, executorTag, updateChannelId) => {
   const embed = new EmbedBuilder()
     .setTitle(`Team Update: ${title}`)
@@ -236,7 +236,7 @@ const updateLiveLineup = async (guild, series) => {
       liveLineupIds[series] = msg.id;
       await saveData("NewLiveEmbed");
     }
-  } catch (e) { console.error("Lineup update error", e); }
+  } catch (e) { console.error("Lineup error:", e); }
 };
 
 // ========================
@@ -257,23 +257,23 @@ const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 // ========================
 const seriesChoices = [{ name: "F1", value: "F1" }, { name: "F2", value: "F2" }];
 const commands = [
-  new SlashCommandBuilder().setName("sign").setDescription("Sign a user to a league team and role")
+  new SlashCommandBuilder().setName("sign").setDescription("Sign a user to a team")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addUserOption(o => o.setName("user").setDescription("User to sign").setRequired(true))
     .addStringOption(o => o.setName("team").setDescription("Team").setRequired(true).setAutocomplete(true))
     .addStringOption(o => o.setName("role").setDescription("Role").setRequired(true).setAutocomplete(true)),
 
-  new SlashCommandBuilder().setName("move").setDescription("Move a user to a new team and role")
+  new SlashCommandBuilder().setName("move").setDescription("Move a user to a new team/role")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addUserOption(o => o.setName("user").setDescription("User to move").setRequired(true))
     .addStringOption(o => o.setName("team").setDescription("Team").setRequired(true).setAutocomplete(true))
     .addStringOption(o => o.setName("role").setDescription("Role").setRequired(true).setAutocomplete(true)),
 
-  new SlashCommandBuilder().setName("release").setDescription("Release a user from all bot-assigned roles")
+  new SlashCommandBuilder().setName("release").setDescription("Release a user")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addUserOption(o => o.setName("user").setDescription("User").setRequired(true)),
 
-  new SlashCommandBuilder().setName("register").setDescription("Register car number, username, flag")
+  new SlashCommandBuilder().setName("register").setDescription("Register car number, flag")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addIntegerOption(o => o.setName("carnumber").setDescription("Car number").setRequired(true))
     .addStringOption(o => o.setName("username").setDescription("Username").setRequired(true))
@@ -283,22 +283,18 @@ const commands = [
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addUserOption(o => o.setName("user").setDescription("User").setRequired(false)),
 
-  new SlashCommandBuilder().setName("lineupyear").setDescription("Show all teams lineup")
+  new SlashCommandBuilder().setName("lineupyear").setDescription("Force refresh lineup")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices)),
 
   new SlashCommandBuilder().setName("help").setDescription("Show commands"),
-
-  new SlashCommandBuilder().setName("resetdata").setDescription("Reset all bot data (admin only)"),
-  new SlashCommandBuilder().setName("cleanname").setDescription("Reset all user nicknames (admin only)"),
+  new SlashCommandBuilder().setName("resetdata").setDescription("Reset all data (Admin)"),
+  new SlashCommandBuilder().setName("cleanname").setDescription("Reset nicknames (Admin)"),
   
-  new SlashCommandBuilder().setName("carnumberclaim").setDescription("Claim car numbers for a league (admin only)")
+  new SlashCommandBuilder().setName("carnumberclaim").setDescription("Claim car numbers (Admin)")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
-    .addIntegerOption(o => o.setName("number").setDescription("Car number to claim").setRequired(true))
+    .addIntegerOption(o => o.setName("number").setDescription("Car number").setRequired(true))
 ].map(c => c.toJSON());
 
-// ========================
-// ADMIN CHECK
-// ========================
 const isAdmin = async (interaction) => {
   try {
     const member = await interaction.guild.members.fetch(interaction.user.id);
@@ -310,22 +306,16 @@ const isAdmin = async (interaction) => {
 // STARTUP
 // ========================
 client.once("ready", async () => {
-  console.log(`Logged in as ${client.user.tag}`);
+  console.log(`Bot Active: ${client.user.tag}`);
   
-  // Heartbeat
-  setInterval(async () => {
-    try { await fetch("https://cronitor.link/p/5228af7c42f54ba681f4b7c436c08f1b/luqCyv"); console.log("Heartbeat sent"); } 
-    catch(e) { console.error("Heartbeat fail", e); }
-  }, 60000);
+  await loadData(); 
 
-  // Load Data
-  await loadDataFromDiscord();
+  setInterval(async () => {
+    try { await fetch("https://cronitor.link/p/5228af7c42f54ba681f4b7c436c08f1b/luqCyv"); } catch(e) {}
+  }, 60000);
 
   try {
     await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
-    console.log("Commands registered!");
-    
-    // Refresh Lineups
     client.guilds.cache.forEach(guild => {
       updateLiveLineup(guild, "F1");
       updateLiveLineup(guild, "F2");
@@ -333,20 +323,10 @@ client.once("ready", async () => {
   } catch (err) { console.error(err); }
 });
 
-client.login(process.env.DISCORD_TOKEN);
-
-// ========================
-// EXPRESS (Health Check)
-// ========================
-const app = express();
-app.get("/", (req, res) => res.send("Bot is alive!"));
-app.listen(process.env.PORT || 3000);
-
 // ========================
 // INTERACTION HANDLER
 // ========================
 client.on("interactionCreate", async interaction => {
-  // 1. Handle Autocomplete (These do NOT use deferReply)
   if (interaction.isAutocomplete()) {
     const focused = interaction.options.getFocused(true);
     const league = interaction.options.getString("league");
@@ -364,108 +344,69 @@ client.on("interactionCreate", async interaction => {
     return;
   }
 
-  // 2. Handle Commands
   if (!interaction.isCommand()) return;
 
-  // === CRITICAL FIX: DEFER IMMEDIATELY ===
-  // This tells Discord "I'm thinking..." and buys us 15 minutes.
-  // Using flags: MessageFlags.Ephemeral fixes the deprecation warning.
   try {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  } catch (e) {
-      console.error("Failed to defer:", e);
-      return; // If we can't defer, we can't reply. Stop here.
-  }
+  } catch (e) { return; }
 
   const { commandName, options, user, guild } = interaction;
 
-  // Wrap logic in Try/Catch to avoid crashing on errors
   try {
       const league = options.getString("league");
       const config = league ? seriesConfigs[league] : null;
       const assignedPlayers = league ? getAssignedPlayers(league) : null;
 
-      // Note: All responses below must use editReply(), not reply()
-
-      // -------------------- HELP --------------------
       if (commandName === "help") {
-        return interaction.editReply({
-          content: `**Commands**\n/sign, /move, /release, /register, /profile, /lineupyear, /resetdata, /cleanname, /carnumberclaim`
-        });
+        return interaction.editReply({ content: `**Commands**\n/sign, /move, /release, /register, /profile, /lineupyear, /resetdata, /cleanname, /carnumberclaim` });
       }
 
-      // -------------------- RESET DATA --------------------
       if (commandName === "resetdata") {
         if (!(await isAdmin(interaction))) return interaction.editReply({ content: "Not authorized." });
-
-        assignedPlayersF1 = {};
-        assignedPlayersF2 = {};
-        registrationData = {};
-        liveLineupIds = { F1: null, F2: null };
-        carNumberClaims = { F1: [], F2: [] };
-        
+        assignedPlayersF1 = {}; assignedPlayersF2 = {}; registrationData = {};
+        liveLineupIds = { F1: null, F2: null }; carNumberClaims = { F1: [], F2: [] };
         await saveData("ResetData");
-        return interaction.editReply({ content: "✅ All bot data reset and synced!" });
+        return interaction.editReply({ content: "✅ All data reset locally and in backup!" });
       }
 
-      // -------------------- CLEANNAME --------------------
       if (commandName === "cleanname") {
         if (!(await isAdmin(interaction))) return interaction.editReply({ content: "Not authorized." });
-        
         const members = await guild.members.fetch();
-        let count = 0;
-        for (const [id, m] of members) {
-             if (!m.user.bot) {
-                 await m.setNickname(null).catch(() => {});
-                 count++;
-             }
-        }
-        return interaction.editReply({ content: `✅ Attempted to reset ${count} nicknames.` });
+        for (const [id, m] of members) { if (!m.user.bot) await m.setNickname(null).catch(() => {}); }
+        return interaction.editReply({ content: `✅ Nicknames reset.` });
       }
 
-      // -------------------- CARNUMBERCLAIM --------------------
       if (commandName === "carnumberclaim") {
         if (!(await isAdmin(interaction))) return interaction.editReply({ content: "Not authorized." });
-
         const number = options.getInteger("number");
         if (!carNumberClaims[league]) carNumberClaims[league] = [];
-        if (carNumberClaims[league].includes(number)) return interaction.editReply({ content: `Car number ${number} is already claimed in ${league}!` });
-
+        if (carNumberClaims[league].includes(number)) return interaction.editReply({ content: `Number ${number} already claimed!` });
         carNumberClaims[league].push(number);
         await saveData("CarClaim");
-
         return interaction.editReply({ content: `✅ Car number ${number} claimed for ${league}` });
       }
 
-      // -------------------- REGISTER --------------------
       if (commandName === "register") {
         const carNumber = options.getInteger("carnumber");
         const username = options.getString("username");
         const flag = options.getString("flag");
-
-        if (isCarNumberTaken(league, carNumber, user.id) || (carNumberClaims[league] && carNumberClaims[league].includes(carNumber)))
-          return interaction.editReply({ content: `Car number ${carNumber} is already taken in ${league}!` });
-
+        if (isCarNumberTaken(league, carNumber, user.id) || (carNumberClaims[league]?.includes(carNumber)))
+          return interaction.editReply({ content: `Car number ${carNumber} is taken!` });
         registrationData[user.id] = { series: league, carnumber: carNumber, username, flag };
         await saveData("Register");
-
         try {
           const member = await guild.members.fetch(user.id);
-          if (member) await member.setNickname(`${carNumber} | ${username} ${flag}`);
+          await member.setNickname(`${carNumber} | ${username} ${flag}`);
         } catch {}
-
-        return interaction.editReply({ content: `Registered as ${carNumber} | ${username} ${flag} in ${league}` });
+        return interaction.editReply({ content: `Registered as ${carNumber} | ${username} ${flag}` });
       }
 
-      // -------------------- PROFILE --------------------
       if (commandName === "profile") {
           const targetUser = options.getUser("user") || user;
           const reg = registrationData[targetUser.id];
           const assign = assignedPlayersF1[targetUser.id] || assignedPlayersF2[targetUser.id];
-          
           const embed = new EmbedBuilder()
-            .setTitle(`${targetUser.username}'s Profile`)
-            .setColor("Blue")
+            .setTitle(`${targetUser.username}'s Profile`).setColor("Blue")
             .addFields(
                 { name: "League", value: reg ? reg.series : "Unregistered", inline: true },
                 { name: "Car #", value: reg ? `${reg.carnumber}` : "N/A", inline: true },
@@ -475,86 +416,73 @@ client.on("interactionCreate", async interaction => {
           return interaction.editReply({ embeds: [embed] });
       }
 
-      // -------------------- SIGN --------------------
       if (commandName === "sign") {
         const target = options.getUser("user");
         const team = options.getString("team");
         const role = options.getString("role");
-
-        if (!config.teamRoleIds[team]) return interaction.editReply({ content: "Invalid team." });
-        if (!config.playerRoles[role]) return interaction.editReply({ content: "Invalid role." });
-        if (countRoleInTeam(league, team, role) >= config.playerRoles[role].max) return interaction.editReply({ content: `${role} limit reached in ${team}` });
+        if (!config.teamRoleIds[team] || !config.playerRoles[role]) return interaction.editReply({ content: "Invalid config." });
+        if (countRoleInTeam(league, team, role) >= config.playerRoles[role].max) return interaction.editReply({ content: "Role limit reached." });
 
         assignedPlayers[`${target.id}`] = { team, role };
         await saveData("Sign");
-
         try {
           const member = await guild.members.fetch(target.id);
-          const roleId = config.playerRoles[role].id;
-          if (member && roleId) member.roles.add(roleId).catch(() => {});
+          member.roles.add(config.playerRoles[role].id).catch(() => {});
         } catch {}
-
         updateLiveLineup(guild, league);
-        sendEmbed(guild, "Sign", `<@${target.id}> signed as ${role} in ${team}`, "Green", user.tag, config.updateChannelId);
-        return interaction.editReply({ content: `Signed ${target.tag} as ${role} in ${team}` });
+        sendEmbed(guild, "Sign", `<@${target.id}> signed: ${role} @ ${team}`, "Green", user.tag, config.updateChannelId);
+        return interaction.editReply({ content: `Signed ${target.tag}` });
       }
 
-      // -------------------- MOVE --------------------
       if (commandName === "move") {
         const target = options.getUser("user");
         const team = options.getString("team");
         const role = options.getString("role");
-
-        if (!assignedPlayers[`${target.id}`]) return interaction.editReply({ content: "User not signed yet." });
-        if (!config.teamRoleIds[team]) return interaction.editReply({ content: "Invalid team." });
-        if (!config.playerRoles[role]) return interaction.editReply({ content: "Invalid role." });
-        if (countRoleInTeam(league, team, role) >= config.playerRoles[role].max) return interaction.editReply({ content: `${role} limit reached in ${team}` });
-
-        const oldRoleId = config.playerRoles[assignedPlayers[`${target.id}`].role]?.id;
-        assignedPlayers[`${target.id}`] = { team, role };
+        if (!assignedPlayers[`${target.id}`]) return interaction.editReply({ content: "User not signed." });
+        const oldRole = config.playerRoles[assignedPlayers[target.id].role]?.id;
+        assignedPlayers[target.id] = { team, role };
         await saveData("Move");
-
         try {
           const member = await guild.members.fetch(target.id);
-          if (member) {
-            if (oldRoleId) member.roles.remove(oldRoleId).catch(() => {});
-            member.roles.add(config.playerRoles[role].id).catch(() => {});
-          }
+          if (oldRole) await member.roles.remove(oldRole).catch(() => {});
+          await member.roles.add(config.playerRoles[role].id).catch(() => {});
         } catch {}
-
         updateLiveLineup(guild, league);
-        sendEmbed(guild, "Move", `<@${target.id}> moved to ${role} in ${team}`, "Orange", user.tag, config.updateChannelId);
-        return interaction.editReply({ content: `Moved ${target.tag} to ${role} in ${team}` });
+        sendEmbed(guild, "Move", `<@${target.id}> moved to ${role} @ ${team}`, "Orange", user.tag, config.updateChannelId);
+        return interaction.editReply({ content: `Moved ${target.tag}` });
       }
 
-      // -------------------- RELEASE --------------------
       if (commandName === "release") {
         const target = options.getUser("user");
-        if (!assignedPlayers[`${target.id}`]) return interaction.editReply({ content: "User not signed yet." });
-
-        const oldRoleId = config.playerRoles[assignedPlayers[`${target.id}`].role]?.id;
-        delete assignedPlayers[`${target.id}`];
+        if (!assignedPlayers[target.id]) return interaction.editReply({ content: "User not signed." });
+        const oldRole = config.playerRoles[assignedPlayers[target.id].role]?.id;
+        delete assignedPlayers[target.id];
         await saveData("Release");
-
         try {
           const member = await guild.members.fetch(target.id);
-          if (member && oldRoleId) member.roles.remove(oldRoleId).catch(() => {});
+          if (oldRole) await member.roles.remove(oldRole).catch(() => {});
         } catch {}
-
         updateLiveLineup(guild, league);
-        sendEmbed(guild, "Release", `<@${target.id}> released from all roles in ${league}`, "Red", user.tag, config.updateChannelId);
-        return interaction.editReply({ content: `Released ${target.tag} from all roles in ${league}` });
+        sendEmbed(guild, "Release", `<@${target.id}> released`, "Red", user.tag, config.updateChannelId);
+        return interaction.editReply({ content: `Released ${target.tag}` });
       }
 
-      // -------------------- LINEUPYEAR --------------------
       if (commandName === "lineupyear") {
         updateLiveLineup(guild, league);
-        return interaction.editReply({ content: `${league} lineup updated!` });
+        return interaction.editReply({ content: `Lineup refreshed.` });
       }
 
   } catch (error) {
-      console.error("Command Error:", error);
-      // Since we already deferred, use editReply for errors too
-      return interaction.editReply({ content: "An error occurred while executing this command." }).catch(() => {});
+      console.error(error);
+      return interaction.editReply({ content: "Error occurred." }).catch(() => {});
   }
 });
+
+// ========================
+// HEALTH CHECK
+// ========================
+const app = express();
+app.get("/", (req, res) => res.send("Bot is running and syncing."));
+app.listen(process.env.PORT || 3000);
+
+client.login(process.env.DISCORD_TOKEN);
