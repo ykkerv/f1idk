@@ -4,8 +4,6 @@
 import 'dotenv/config';
 import express from "express";
 import fetch from "node-fetch";
-import fs from "fs";
-import path from "path";
 import { 
     Client, 
     GatewayIntentBits, 
@@ -17,24 +15,10 @@ import {
     MessageFlags 
 } from "discord.js";
 
-// --- CONFIGURATION ---
 const BACKUP_CHANNEL_ID = "1452397713252548638"; 
-const dataDir = path.join(process.cwd(), "data");
-
-// Ensure data dir exists
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
-
-// File Paths
-const paths = {
-    assignedF1: path.join(dataDir, "assignedPlayersF1.json"),
-    assignedF2: path.join(dataDir, "assignedPlayersF2.json"),
-    registration: path.join(dataDir, "registrationData.json"),
-    liveLineup: path.join(dataDir, "liveLineup.json"),
-    carClaims: path.join(dataDir, "carNumberClaims.json")
-};
 
 // ========================
-// 🛑 DEFAULT DATA (Hardcoded for Render Persistence) 🛑
+// 🛑 DEFAULT DATA (Hardcoded Source of Truth) 🛑
 // ========================
 const DEFAULTS = {
     assignedF1: {
@@ -116,7 +100,7 @@ const DEFAULTS = {
 };
 
 // ========================
-// INITIAL STATE (LOADS DEFAULTS FIRST)
+// INITIAL STATE
 // ========================
 let assignedPlayersF1 = JSON.parse(JSON.stringify(DEFAULTS.assignedF1));
 let assignedPlayersF2 = JSON.parse(JSON.stringify(DEFAULTS.assignedF2));
@@ -125,27 +109,10 @@ let liveLineupIds = JSON.parse(JSON.stringify(DEFAULTS.liveLineup));
 let carNumberClaims = JSON.parse(JSON.stringify(DEFAULTS.carClaims));
 
 // ========================
-// CRASH PREVENTION
+// PERSISTENCE (DISCORD ONLY)
 // ========================
-process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:', reason));
-process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
-
-// ========================
-// DATA PERSISTENCE
-// ========================
-
 const saveData = async (reason) => {
     try {
-        // 1. Physical Write to Local Files
-        fs.writeFileSync(paths.assignedF1, JSON.stringify(assignedPlayersF1, null, 2));
-        fs.writeFileSync(paths.assignedF2, JSON.stringify(assignedPlayersF2, null, 2));
-        fs.writeFileSync(paths.registration, JSON.stringify(registrationData, null, 2));
-        fs.writeFileSync(paths.liveLineup, JSON.stringify(liveLineupIds, null, 2));
-        fs.writeFileSync(paths.carClaims, JSON.stringify(carNumberClaims, null, 2));
-
-        console.log(`💾 Local Files Updated: ${reason}`);
-
-        // 2. Backup to Discord
         const masterBackup = {
             assignedPlayersF1, assignedPlayersF2,
             registrationData, liveLineupIds, carNumberClaims,
@@ -157,19 +124,18 @@ const saveData = async (reason) => {
             const buffer = Buffer.from(JSON.stringify(masterBackup, null, 2));
             const attachment = new AttachmentBuilder(buffer, { name: 'backup_data.json' });
             await channel.send({ 
-                content: `🚀 Data Sync [${reason}]`, 
+                content: `🚀 Cloud Sync [${reason}]`, 
                 files: [attachment] 
             });
+            console.log(`✅ Data synced to Discord channel: ${reason}`);
         }
     } catch (err) {
-        console.error("Save Error:", err);
+        console.error("Cloud Save Error:", err);
     }
 };
 
 const loadData = async () => {
-    console.log("🔄 Starting Data Load...");
-    
-    // 1. Restore from Discord (Backup takes priority over Defaults)
+    console.log("🔄 Fetching cloud backup...");
     try {
         const channel = await client.channels.fetch(BACKUP_CHANNEL_ID);
         if (!channel?.isTextBased()) return;
@@ -181,26 +147,18 @@ const loadData = async () => {
             const response = await fetch(backupMsg.attachments.first().url);
             const data = await response.json();
 
-            // Overwrite variables ONLY if backup data exists
             if (data.assignedPlayersF1) assignedPlayersF1 = data.assignedPlayersF1;
             if (data.assignedPlayersF2) assignedPlayersF2 = data.assignedPlayersF2;
             if (data.registrationData) registrationData = data.registrationData;
             if (data.liveLineupIds) liveLineupIds = data.liveLineupIds;
             if (data.carNumberClaims) carNumberClaims = data.carNumberClaims;
 
-            // Update local files to match
-            fs.writeFileSync(paths.assignedF1, JSON.stringify(assignedPlayersF1, null, 2));
-            fs.writeFileSync(paths.assignedF2, JSON.stringify(assignedPlayersF2, null, 2));
-            fs.writeFileSync(paths.registration, JSON.stringify(registrationData, null, 2));
-            fs.writeFileSync(paths.liveLineup, JSON.stringify(liveLineupIds, null, 2));
-            fs.writeFileSync(paths.carClaims, JSON.stringify(carNumberClaims, null, 2));
-
-            console.log("♻️ Data restored from Discord Backup.");
+            console.log("♻️ Data restored from Cloud Backup.");
         } else {
-            console.log("⚠️ No Discord backup found. Using DEFAULTS.");
+            console.log("⚠️ No cloud backup found. Using DEFAULTS.");
         }
     } catch (err) {
-        console.error("Backup Restore Failed (Using Defaults):", err);
+        console.error("Cloud Restore Failed (Using Defaults):", err);
     }
 };
 
@@ -277,12 +235,8 @@ const countRoleInTeam = (series, team, role) => {
 };
 
 const isCarNumberTaken = (series, number, userId) => {
-  // 1. Check active registrations
   const regTaken = Object.entries(registrationData).some(([uid, data]) => data.series === series && data.carnumber === number && uid !== userId);
-  
-  // 2. Check claim list (Array of objects {number, userId})
   const claimTaken = carNumberClaims[series]?.some(c => c.number === number);
-
   return regTaken || claimTaken;
 };
 
@@ -309,7 +263,6 @@ const updateLiveLineup = async (guild, series) => {
       if (msg) {
           await msg.edit({ embeds: [embed] });
       } else {
-          // Message ID exists in DB but not in channel (deleted), send new
           const newMsg = await channel.send({ embeds: [embed] });
           liveLineupIds[series] = newMsg.id;
           await saveData("FixLiveEmbed");
@@ -323,21 +276,13 @@ const updateLiveLineup = async (guild, series) => {
 };
 
 // ========================
-// DISCORD CLIENT
+// CLIENT & COMMANDS
 // ========================
 const client = new Client({ 
-    intents: [
-        GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMembers, 
-        GatewayIntentBits.MessageContent 
-    ] 
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent] 
 });
-
 const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 
-// ========================
-// COMMAND DEFINITIONS
-// ========================
 const seriesChoices = [{ name: "F1", value: "F1" }, { name: "F2", value: "F2" }];
 const commands = [
   new SlashCommandBuilder().setName("sign").setDescription("Sign a user to a team")
@@ -372,7 +317,6 @@ const commands = [
   new SlashCommandBuilder().setName("help").setDescription("Show commands"),
   new SlashCommandBuilder().setName("resetdata").setDescription("Reset all data (Admin)"),
   new SlashCommandBuilder().setName("cleanname").setDescription("Reset nicknames (Admin)"),
-  
   new SlashCommandBuilder().setName("carnumberclaim").setDescription("Claim car numbers (Admin)")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
     .addIntegerOption(o => o.setName("number").setDescription("Car number").setRequired(true))
@@ -390,24 +334,11 @@ const isAdmin = async (interaction) => {
 // ========================
 client.once("ready", async () => {
   console.log(`Bot Active: ${client.user.tag}`);
-  
-  // Attempt to load from Discord first. 
-  // If that fails, the variables are ALREADY populated with your DEFAULTS.
   await loadData(); 
-
-  // Force a "Fresh" save to Discord to ensure the defaults are backed up if the channel is empty
   setTimeout(() => saveData("StartupSync"), 5000);
-
-  setInterval(async () => {
-    try { await fetch("https://cronitor.link/p/5228af7c42f54ba681f4b7c436c08f1b/luqCyv"); } catch(e) {}
-  }, 60000);
 
   try {
     await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
-    client.guilds.cache.forEach(guild => {
-      updateLiveLineup(guild, "F1");
-      updateLiveLineup(guild, "F2");
-    });
   } catch (err) { console.error(err); }
 });
 
@@ -451,14 +382,11 @@ client.on("interactionCreate", async interaction => {
 
       if (commandName === "resetdata") {
         if (!(await isAdmin(interaction))) return interaction.editReply({ content: "Not authorized." });
-        
-        // Reset to DEFAULTS, not empty objects
         assignedPlayersF1 = JSON.parse(JSON.stringify(DEFAULTS.assignedF1));
         assignedPlayersF2 = JSON.parse(JSON.stringify(DEFAULTS.assignedF2));
         registrationData = {};
         liveLineupIds = JSON.parse(JSON.stringify(DEFAULTS.liveLineup));
         carNumberClaims = JSON.parse(JSON.stringify(DEFAULTS.carClaims));
-        
         await saveData("ResetData");
         return interaction.editReply({ content: "✅ All data reset to DEFAULT state!" });
       }
@@ -473,17 +401,9 @@ client.on("interactionCreate", async interaction => {
       if (commandName === "carnumberclaim") {
         if (!(await isAdmin(interaction))) return interaction.editReply({ content: "Not authorized." });
         const number = options.getInteger("number");
-        
         if (!carNumberClaims[league]) carNumberClaims[league] = [];
-        
-        // Check for existing claim (Object array structure)
-        if (carNumberClaims[league].some(c => c.number === number)) {
-            return interaction.editReply({ content: `Number ${number} already claimed!` });
-        }
-        
-        // Add new claim
+        if (carNumberClaims[league].some(c => c.number === number)) return interaction.editReply({ content: `Number ${number} already claimed!` });
         carNumberClaims[league].push({ number: number, userId: "ADMIN_CLAIM" });
-        
         await saveData("CarClaim");
         return interaction.editReply({ content: `✅ Car number ${number} claimed for ${league}` });
       }
@@ -492,10 +412,7 @@ client.on("interactionCreate", async interaction => {
         const carNumber = options.getInteger("carnumber");
         const username = options.getString("username");
         const flag = options.getString("flag");
-        
-        if (isCarNumberTaken(league, carNumber, user.id))
-          return interaction.editReply({ content: `Car number ${carNumber} is taken!` });
-        
+        if (isCarNumberTaken(league, carNumber, user.id)) return interaction.editReply({ content: `Car number ${carNumber} is taken!` });
         registrationData[user.id] = { series: league, carnumber: carNumber, username, flag };
         await saveData("Register");
         try {
@@ -526,7 +443,6 @@ client.on("interactionCreate", async interaction => {
         const role = options.getString("role");
         if (!config.teamRoleIds[team] || !config.playerRoles[role]) return interaction.editReply({ content: "Invalid config." });
         if (countRoleInTeam(league, team, role) >= config.playerRoles[role].max) return interaction.editReply({ content: "Role limit reached." });
-
         assignedPlayers[`${target.id}`] = { team, role };
         await saveData("Sign");
         try {
@@ -586,7 +502,7 @@ client.on("interactionCreate", async interaction => {
 // HEALTH CHECK
 // ========================
 const app = express();
-app.get("/", (req, res) => res.send("Bot is running and syncing."));
+app.get("/", (req, res) => res.send("Bot is active. Cloud-sync only."));
 app.listen(process.env.PORT || 3000);
 
 client.login(process.env.DISCORD_TOKEN);
