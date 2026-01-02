@@ -52,15 +52,24 @@ process.on('uncaughtException', (err) => {
 // ========================
 // DATA PERSISTENCE
 // ========================
-const saveData = async (type) => {
-    // 1. Save locally
-    fs.writeFileSync(assignedFileF1, JSON.stringify(assignedPlayersF1, null, 2));
-    fs.writeFileSync(assignedFileF2, JSON.stringify(assignedPlayersF2, null, 2));
-    fs.writeFileSync(registrationFile, JSON.stringify(registrationData, null, 2));
-    fs.writeFileSync(liveEmbedFile, JSON.stringify(liveLineupIds, null, 2));
-    fs.writeFileSync(carNumberClaimFile, JSON.stringify(carNumberClaims, null, 2));
+// ========================
+// REFINED DATA HELPERS
+// ========================
 
-    // 2. Create Master Backup
+const saveData = async (type) => {
+    // 1. Physically write to the local files first
+    // This ensures your local folder stays updated
+    try {
+        fs.writeFileSync(assignedFileF1, JSON.stringify(assignedPlayersF1, null, 2));
+        fs.writeFileSync(assignedFileF2, JSON.stringify(assignedPlayersF2, null, 2));
+        fs.writeFileSync(registrationFile, JSON.stringify(registrationData, null, 2));
+        fs.writeFileSync(carNumberClaimFile, JSON.stringify(carNumberClaims, null, 2));
+        fs.writeFileSync(liveEmbedFile, JSON.stringify(liveLineupIds, null, 2));
+    } catch (err) {
+        console.error("Local write failed:", err);
+    }
+
+    // 2. Prepare the backup for Discord (Long-term storage)
     const masterBackup = {
         assignedPlayersF1,
         assignedPlayersF2,
@@ -70,52 +79,55 @@ const saveData = async (type) => {
         timestamp: new Date().toISOString()
     };
 
-    // 3. Upload to Discord Channel
+    // 3. Send to Discord
     try {
         const channel = await client.channels.fetch(BACKUP_CHANNEL_ID);
-        if (channel && channel.isTextBased()) {
+        if (channel?.isTextBased()) {
             const buffer = Buffer.from(JSON.stringify(masterBackup, null, 2), 'utf-8');
             const attachment = new AttachmentBuilder(buffer, { name: 'backup_data.json' });
-            
             await channel.send({ 
-                content: `💾 **Data Auto-Save:** ${type} | ${new Date().toLocaleString()}`, 
+                content: `💾 Syncing local files to cloud [${type}]`, 
                 files: [attachment] 
             });
-            console.log("✅ Data backed up to Discord Channel");
         }
     } catch (err) {
-        console.error("❌ Failed to backup to Discord Channel:", err);
+        console.error("Discord backup failed:", err);
     }
 };
 
 const loadDataFromDiscord = async () => {
-    console.log("🔄 Loading data from Discord Backup...");
+    console.log("🔄 Restoring local files from Discord Backup...");
     try {
         const channel = await client.channels.fetch(BACKUP_CHANNEL_ID);
-        if (!channel || !channel.isTextBased()) return;
+        if (!channel?.isTextBased()) return;
 
         const messages = await channel.messages.fetch({ limit: 10 });
         const backupMsg = messages.find(m => m.attachments.size > 0);
 
         if (backupMsg) {
-            const attachment = backupMsg.attachments.first();
-            const response = await fetch(attachment.url);
+            const response = await fetch(backupMsg.attachments.first().url);
             const data = await response.json();
 
-            if (data.assignedPlayersF1) assignedPlayersF1 = data.assignedPlayersF1;
-            if (data.assignedPlayersF2) assignedPlayersF2 = data.assignedPlayersF2;
-            if (data.registrationData) registrationData = data.registrationData;
-            if (data.liveLineupIds) liveLineupIds = data.liveLineupIds;
-            if (data.carNumberClaims) carNumberClaims = data.carNumberClaims;
+            // Load into memory
+            assignedPlayersF1 = data.assignedPlayersF1 || {};
+            assignedPlayersF2 = data.assignedPlayersF2 || {};
+            registrationData = data.registrationData || {};
+            liveLineupIds = data.liveLineupIds || { F1: null, F2: null };
+            carNumberClaims = data.carNumberClaims || { F1: [], F2: [] };
 
-            console.log("✅ Data restored successfully!");
-        } else {
-            console.log("⚠️ No backup found. Starting fresh.");
+            // 4. IMPORTANT: Write these back to the files so data/assignedPlayersF1.json exists
+            fs.writeFileSync(assignedFileF1, JSON.stringify(assignedPlayersF1, null, 2));
+            fs.writeFileSync(assignedFileF2, JSON.stringify(assignedPlayersF2, null, 2));
+            fs.writeFileSync(registrationFile, JSON.stringify(registrationData, null, 2));
+            fs.writeFileSync(carNumberClaimFile, JSON.stringify(carNumberClaims, null, 2));
+            
+            console.log("✅ Local files in /data/ have been restored and are ready to use.");
         }
     } catch (err) {
-        console.error("❌ Failed to load remote data:", err);
+        console.error("Failed to restore local files:", err);
     }
 };
+
 
 // ========================
 // F1/F2 CONFIG
