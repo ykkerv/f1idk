@@ -15,7 +15,9 @@ import {
     MessageFlags 
 } from "discord.js";
 
+// --- CONFIGURATION ---
 const BACKUP_CHANNEL_ID = "1452397713252548638"; 
+const CAR_REGISTRY_CHANNEL_ID = "1452244527749533726"; // Added for future use
 
 // ========================
 // 🛑 DEFAULT DATA (Hardcoded Source of Truth) 🛑
@@ -93,8 +95,10 @@ const DEFAULTS = {
         ]
     },
     liveLineup: {
-        "F1": "1452400029078913155",
-        "F2": "1452400031377395722"
+        // 🛑 CLEARED: We set these to empty strings so the bot creates FRESH messages
+        // instead of trying to edit the old bugged IDs.
+        "F1": "", 
+        "F2": ""
     },
     registration: {}
 };
@@ -150,7 +154,15 @@ const loadData = async () => {
             if (data.assignedPlayersF1) assignedPlayersF1 = data.assignedPlayersF1;
             if (data.assignedPlayersF2) assignedPlayersF2 = data.assignedPlayersF2;
             if (data.registrationData) registrationData = data.registrationData;
-            if (data.liveLineupIds) liveLineupIds = data.liveLineupIds;
+            
+            // We load liveLineupIds from backup, BUT if they match the old bugged ones, we reset them
+            // This is a safety check during load
+            if (data.liveLineupIds) {
+                liveLineupIds = data.liveLineupIds;
+                if(liveLineupIds.F1 === "1452400029078913155") liveLineupIds.F1 = "";
+                if(liveLineupIds.F2 === "1452400031377395722") liveLineupIds.F2 = "";
+            }
+
             if (data.carNumberClaims) carNumberClaims = data.carNumberClaims;
 
             console.log("♻️ Data restored from Cloud Backup.");
@@ -186,7 +198,7 @@ const seriesConfigs = {
       "Engineer F1": { id: "1432786005106102342", max: 2 }
     },
     updateChannelId: "1432370687888064735",
-    liveLineupChannelId: "1432370391929716787"
+    liveLineupChannelId: "1432370391929716787" // Verified F1 Lineup Channel
   },
   F2: {
     teamRoleIds: { 
@@ -208,7 +220,7 @@ const seriesConfigs = {
       "Engineer F2": { id: "1435197815461642400", max: 2 }
     },
     updateChannelId: "1432371785181040640",
-    liveLineupChannelId: "1432371611927056544"
+    liveLineupChannelId: "1432371611927056544" // Verified F2 Lineup Channel
   }
 };
 
@@ -258,16 +270,19 @@ const updateLiveLineup = async (guild, series) => {
   if (!channel?.isTextBased()) return;
 
   try {
-    if (liveLineupIds[series]) {
+    // If ID exists and is NOT empty string
+    if (liveLineupIds[series] && liveLineupIds[series].length > 0) {
       const msg = await channel.messages.fetch(liveLineupIds[series]).catch(() => null);
       if (msg) {
           await msg.edit({ embeds: [embed] });
       } else {
+          // Message not found (deleted manually or invalid ID), create new
           const newMsg = await channel.send({ embeds: [embed] });
           liveLineupIds[series] = newMsg.id;
           await saveData("FixLiveEmbed");
       }
     } else {
+      // No ID stored, create new
       const msg = await channel.send({ embeds: [embed] });
       liveLineupIds[series] = msg.id;
       await saveData("NewLiveEmbed");
@@ -335,6 +350,8 @@ const isAdmin = async (interaction) => {
 client.once("ready", async () => {
   console.log(`Bot Active: ${client.user.tag}`);
   await loadData(); 
+  
+  // Force a sync shortly after startup to ensure any ID fixes in loadData are persisted
   setTimeout(() => saveData("StartupSync"), 5000);
 
   try {
@@ -385,7 +402,7 @@ client.on("interactionCreate", async interaction => {
         assignedPlayersF1 = JSON.parse(JSON.stringify(DEFAULTS.assignedF1));
         assignedPlayersF2 = JSON.parse(JSON.stringify(DEFAULTS.assignedF2));
         registrationData = {};
-        liveLineupIds = JSON.parse(JSON.stringify(DEFAULTS.liveLineup));
+        liveLineupIds = JSON.parse(JSON.stringify(DEFAULTS.liveLineup)); // This will reset IDs to empty strings
         carNumberClaims = JSON.parse(JSON.stringify(DEFAULTS.carClaims));
         await saveData("ResetData");
         return interaction.editReply({ content: "✅ All data reset to DEFAULT state!" });
