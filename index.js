@@ -6,10 +6,10 @@ import express from "express";
 import fetch from "node-fetch";
 import fs from "fs";
 import path from "path";
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from "discord.js";
+import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 
 // --- CONSTANTS ---
-const ADMIN_ROLE_ID = "1432285963287003156"; // The Role required for Admin commands
+const ADMIN_ROLE_ID = "1432737274231259351"; // Role required for Admin commands
 const CLAIM_LIST_CHANNEL_ID = "1452244527749533726"; // Channel for the Claimed Numbers List
 
 const dataDir = "./data";
@@ -21,13 +21,20 @@ const registrationFile = path.join(dataDir, "registrationData.json");
 const liveEmbedFile = path.join(dataDir, "liveLineup.json");
 const carNumberClaimFile = path.join(dataDir, "carNumberClaims.json");
 
-// Initialize Files
+// --- INITIALIZE FILES ---
 if (!fs.existsSync(assignedFileF1)) fs.writeFileSync(assignedFileF1, JSON.stringify({}, null, 2));
 if (!fs.existsSync(assignedFileF2)) fs.writeFileSync(assignedFileF2, JSON.stringify({}, null, 2));
 if (!fs.existsSync(registrationFile)) fs.writeFileSync(registrationFile, JSON.stringify({}, null, 2));
-// liveLineup now stores message IDs for lineups AND the claim board
-if (!fs.existsSync(liveEmbedFile)) fs.writeFileSync(liveEmbedFile, JSON.stringify({ F1:null, F2:null, ClaimBoard: null }, null, 2));
-if (!fs.existsSync(carNumberClaimFile)) fs.writeFileSync(carNumberClaimFile, JSON.stringify({ F1:[], F2:[] }, null, 2));
+if (!fs.existsSync(liveEmbedFile)) fs.writeFileSync(liveEmbedFile, JSON.stringify({ F1:null, F2:null }, null, 2));
+
+// Initialize carNumberClaims with the new structure
+if (!fs.existsSync(carNumberClaimFile)) {
+    fs.writeFileSync(carNumberClaimFile, JSON.stringify({ 
+        F1: [], 
+        F2: [], 
+        embeds: { live: null } 
+    }, null, 2));
+}
 
 let assignedPlayersF1 = JSON.parse(fs.readFileSync(assignedFileF1, "utf8"));
 let assignedPlayersF2 = JSON.parse(fs.readFileSync(assignedFileF2, "utf8"));
@@ -142,8 +149,11 @@ const countRoleInTeam = (series, team, role) => {
 const isCarNumberTaken = (series, number, userId) => {
   // Check registration data
   const registered = Object.entries(registrationData).some(([uid, data]) => data.series === series && data.carnumber === number && uid !== userId);
-  // Check claimed list
-  const claimed = carNumberClaims[series].includes(number);
+  
+  // Check claimed list (iterating through objects now)
+  const claimedList = carNumberClaims[series] || [];
+  const claimed = claimedList.some(c => c.number === number);
+  
   return registered || claimed;
 };
 
@@ -186,22 +196,32 @@ const updateClaimBoard = async (guild) => {
   const channel = guild.channels.cache.get(CLAIM_LIST_CHANNEL_ID);
   if (!channel?.isTextBased()) return;
 
-  const f1Claims = carNumberClaims.F1.length > 0 ? carNumberClaims.F1.sort((a,b)=>a-b).join(", ") : "None";
-  const f2Claims = carNumberClaims.F2.length > 0 ? carNumberClaims.F2.sort((a,b)=>a-b).join(", ") : "None";
+  // Helper to format list: "81 - <@123456>"
+  const formatList = (list) => {
+    if (!list || list.length === 0) return "None";
+    return list
+      .sort((a, b) => a.number - b.number)
+      .map(item => `**${item.number}** - <@${item.userId}>`)
+      .join("\n");
+  };
+
+  const f1Claims = formatList(carNumberClaims.F1);
+  const f2Claims = formatList(carNumberClaims.F2);
 
   const embed = new EmbedBuilder()
     .setTitle("🏁 Claimed Car Numbers")
     .setColor("Blue")
     .setDescription("List of numbers currently claimed/reserved in the league.")
     .addFields(
-        { name: "🏎️ F1 Claims", value: f1Claims },
-        { name: "🏎️ F2 Claims", value: f2Claims }
+        { name: "🏎️ F1 Claims", value: f1Claims, inline: true },
+        { name: "🏎️ F2 Claims", value: f2Claims, inline: true }
     )
     .setTimestamp();
 
   try {
-    if (liveLineupIds.ClaimBoard) {
-      const msg = await channel.messages.fetch(liveLineupIds.ClaimBoard).catch(() => null);
+    const messageId = carNumberClaims.embeds?.live;
+    if (messageId) {
+      const msg = await channel.messages.fetch(messageId).catch(() => null);
       if (msg) {
         await msg.edit({ embeds: [embed] });
         return;
@@ -209,8 +229,11 @@ const updateClaimBoard = async (guild) => {
     }
     // If not found or doesn't exist, send new
     const msg = await channel.send({ embeds: [embed] });
-    liveLineupIds.ClaimBoard = msg.id;
-    saveLiveEmbedIds();
+    
+    // Save the new ID into carNumberClaims.json
+    if (!carNumberClaims.embeds) carNumberClaims.embeds = {};
+    carNumberClaims.embeds.live = msg.id;
+    saveCarNumberClaims();
   } catch (err) {
     console.error("Error updating claim board:", err);
   }
@@ -264,7 +287,7 @@ const commands = [
 
   new SlashCommandBuilder().setName("carnumberclaim").setDescription("Claim/Reserve a car number for the list")
     .addStringOption(o => o.setName("league").setDescription("F1 or F2").setRequired(true).addChoices(...seriesChoices))
-    .addIntegerOption(o => o.setName("number").setDescription("The Car Number to claim").setRequired(true)), // Added Number Input
+    .addIntegerOption(o => o.setName("number").setDescription("The Car Number to claim").setRequired(true)),
 ].map(c => c.toJSON());
 
 // ========================
@@ -340,7 +363,6 @@ client.on("interactionCreate", async (interaction) => {
 
   // -------------------- RESET DATA (SECURED) --------------------
   if (commandName === "resetdata") {
-    // Check for specific Admin Role
     if (!member.roles.cache.has(ADMIN_ROLE_ID)) {
         return interaction.reply({ content: "❌ You do not have permission to use this command.", ephemeral: true });
     }
@@ -364,8 +386,8 @@ client.on("interactionCreate", async (interaction) => {
     assignedPlayersF1 = {};
     assignedPlayersF2 = {};
     registrationData = {};
-    liveLineupIds = { F1:null, F2:null, ClaimBoard: null };
-    carNumberClaims = { F1:[], F2:[] };
+    liveLineupIds = { F1:null, F2:null };
+    carNumberClaims = { F1:[], F2:[], embeds: { live: null } };
     
     saveAssignedF1(); saveAssignedF2(); saveRegistration(); saveLiveEmbedIds(); saveCarNumberClaims();
     
@@ -375,7 +397,6 @@ client.on("interactionCreate", async (interaction) => {
 
   // -------------------- CLEANNAME (SECURED) --------------------
   if (commandName === "cleanname") {
-    // Check for specific Admin Role
     if (!member.roles.cache.has(ADMIN_ROLE_ID)) {
         return interaction.reply({ content: "❌ You do not have permission to use this command.", ephemeral: true });
     }
@@ -396,21 +417,21 @@ client.on("interactionCreate", async (interaction) => {
   if (commandName === "carnumberclaim") {
     const numberToClaim = options.getInteger("number");
 
-    // Check if number is valid (e.g. 0-999)
     if (numberToClaim < 0 || numberToClaim > 999) {
         return interaction.reply({ content: "❌ Please enter a valid car number (0-999).", ephemeral: true });
     }
 
-    // Check if already taken (in registration OR claims)
     if (isCarNumberTaken(league, numberToClaim, user.id)) {
         return interaction.reply({ content: `❌ Car number **${numberToClaim}** is already taken/reserved in ${league}!`, ephemeral: true });
     }
 
-    // Add to claims
-    carNumberClaims[league].push(numberToClaim);
+    // Add to claims with Object structure
+    carNumberClaims[league].push({
+        number: numberToClaim,
+        userId: user.id
+    });
+    
     saveCarNumberClaims();
-
-    // Update the Embed in the specific channel
     updateClaimBoard(guild);
 
     return interaction.reply({ content: `✅ Successfully claimed/reserved number **${numberToClaim}** in ${league}.`, ephemeral: true });
@@ -450,7 +471,6 @@ client.on("interactionCreate", async (interaction) => {
     assignedPlayers[`${target.id}`] = { team, role };
     saveAssigned(league);
 
-    // Assign actual Discord role
     try {
       const member = await guild.members.fetch(target.id);
       const roleId = config.playerRoles[role].id;
