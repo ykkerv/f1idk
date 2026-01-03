@@ -6,11 +6,12 @@ import express from "express";
 import fetch from "node-fetch";
 import fs from "fs";
 import path from "path";
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
+import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } from "discord.js";
 
 // --- CONSTANTS ---
 const ADMIN_ROLE_ID = "1432737274231259351"; // Role required for Admin commands
 const CLAIM_LIST_CHANNEL_ID = "1452244527749533726"; // Channel for the Claimed Numbers List
+const BACKUP_CHANNEL_ID = "1452397713252548638"; // <--- YOUR DATA SAVE CHANNEL
 
 const dataDir = "./data";
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
@@ -21,13 +22,13 @@ const registrationFile = path.join(dataDir, "registrationData.json");
 const liveEmbedFile = path.join(dataDir, "liveLineup.json");
 const carNumberClaimFile = path.join(dataDir, "carNumberClaims.json");
 
-// --- INITIALIZE FILES ---
+// --- INITIALIZE FILES (Standard Empty Init) ---
 if (!fs.existsSync(assignedFileF1)) fs.writeFileSync(assignedFileF1, JSON.stringify({}, null, 2));
 if (!fs.existsSync(assignedFileF2)) fs.writeFileSync(assignedFileF2, JSON.stringify({}, null, 2));
 if (!fs.existsSync(registrationFile)) fs.writeFileSync(registrationFile, JSON.stringify({}, null, 2));
 if (!fs.existsSync(liveEmbedFile)) fs.writeFileSync(liveEmbedFile, JSON.stringify({ F1:null, F2:null }, null, 2));
 
-// Initialize carNumberClaims with the new structure
+// Initialize carNumberClaims with structure
 if (!fs.existsSync(carNumberClaimFile)) {
     fs.writeFileSync(carNumberClaimFile, JSON.stringify({ 
         F1: [], 
@@ -36,6 +37,7 @@ if (!fs.existsSync(carNumberClaimFile)) {
     }, null, 2));
 }
 
+// --- LOAD DATA ---
 let assignedPlayersF1 = JSON.parse(fs.readFileSync(assignedFileF1, "utf8"));
 let assignedPlayersF2 = JSON.parse(fs.readFileSync(assignedFileF2, "utf8"));
 let registrationData = JSON.parse(fs.readFileSync(registrationFile, "utf8"));
@@ -127,6 +129,37 @@ const getAssignedPlayers = (series) => series === "F1" ? assignedPlayersF1 : ass
 const saveAssigned = (series) => series === "F1" ? saveAssignedF1() : saveAssignedF2();
 
 // ========================
+// BACKUP HELPER (SENDS JSON FILE)
+// ========================
+const sendDataBackup = async (guild, actionType) => {
+  const channel = guild.channels.cache.get(BACKUP_CHANNEL_ID);
+  if (!channel?.isTextBased()) return;
+
+  // Bundle current state
+  const completeData = {
+    assignedPlayersF1,
+    assignedPlayersF2,
+    registrationData,
+    liveLineupIds,
+    carNumberClaims,
+    lastUpdate: new Date().toISOString(),
+    trigger: actionType
+  };
+
+  try {
+    const buffer = Buffer.from(JSON.stringify(completeData, null, 2), "utf-8");
+    const attachment = new AttachmentBuilder(buffer, { name: 'backup_data.json' });
+
+    await channel.send({ 
+      content: `📦 **Data Backup** | Action: \`${actionType}\` | Time: <t:${Math.floor(Date.now()/1000)}:R>`, 
+      files: [attachment] 
+    });
+  } catch (err) {
+    console.error("Failed to send backup:", err);
+  }
+};
+
+// ========================
 // HELPERS
 // ========================
 const sendEmbed = async (guild, title, description, color, executorTag, updateChannelId) => {
@@ -147,13 +180,9 @@ const countRoleInTeam = (series, team, role) => {
 };
 
 const isCarNumberTaken = (series, number, userId) => {
-  // Check registration data
   const registered = Object.entries(registrationData).some(([uid, data]) => data.series === series && data.carnumber === number && uid !== userId);
-  
-  // Check claimed list (iterating through objects now)
   const claimedList = carNumberClaims[series] || [];
   const claimed = claimedList.some(c => c.number === number);
-  
   return registered || claimed;
 };
 
@@ -177,18 +206,20 @@ const updateLiveLineup = async (guild, series) => {
 
   try {
     if (liveLineupIds[series]) {
-      const msg = await channel.messages.fetch(liveLineupIds[series]);
-      await msg.edit({ embeds: [embed] });
+      const msg = await channel.messages.fetch(liveLineupIds[series]).catch(() => null);
+      if (msg) {
+        await msg.edit({ embeds: [embed] });
+      } else {
+        const newMsg = await channel.send({ embeds: [embed] });
+        liveLineupIds[series] = newMsg.id;
+        saveLiveEmbedIds();
+      }
     } else {
       const msg = await channel.send({ embeds: [embed] });
       liveLineupIds[series] = msg.id;
       saveLiveEmbedIds();
     }
-  } catch {
-    const msg = await channel.send({ embeds: [embed] });
-    liveLineupIds[series] = msg.id;
-    saveLiveEmbedIds();
-  }
+  } catch (err) { console.error("Lineup update error", err); }
 };
 
 // --- UPDATE CLAIMED NUMBERS BOARD ---
@@ -196,12 +227,11 @@ const updateClaimBoard = async (guild) => {
   const channel = guild.channels.cache.get(CLAIM_LIST_CHANNEL_ID);
   if (!channel?.isTextBased()) return;
 
-  // Helper to format list: "81 - <@123456>"
   const formatList = (list) => {
     if (!list || list.length === 0) return "None";
     return list
       .sort((a, b) => a.number - b.number)
-      .map(item => `**${item.number}** - <@${item.userId}>`)
+      .map(item => `**${item.number}** - ${item.userId === 'ADMIN_CLAIM' ? 'Admin Reserved' : `<@${item.userId}>`}`)
       .join("\n");
   };
 
@@ -227,16 +257,11 @@ const updateClaimBoard = async (guild) => {
         return;
       }
     }
-    // If not found or doesn't exist, send new
     const msg = await channel.send({ embeds: [embed] });
-    
-    // Save the new ID into carNumberClaims.json
     if (!carNumberClaims.embeds) carNumberClaims.embeds = {};
     carNumberClaims.embeds.live = msg.id;
     saveCarNumberClaims();
-  } catch (err) {
-    console.error("Error updating claim board:", err);
-  }
+  } catch (err) { console.error("Error updating claim board:", err); }
 };
 
 // ========================
@@ -304,7 +329,7 @@ client.once("ready", async () => {
     client.guilds.cache.forEach(guild => {
       updateLiveLineup(guild, "F1");
       updateLiveLineup(guild, "F2");
-      updateClaimBoard(guild); // Ensure claim board is up on restart
+      updateClaimBoard(guild);
     });
   } catch (err) { console.error(err); }
 });
@@ -392,6 +417,7 @@ client.on("interactionCreate", async (interaction) => {
     saveAssignedF1(); saveAssignedF2(); saveRegistration(); saveLiveEmbedIds(); saveCarNumberClaims();
     
     updateClaimBoard(guild); // Clear the board
+    sendDataBackup(guild, "RESET_DATA"); // Backup after reset
     return interaction.reply({ content: "✅ All bot data has been reset.", ephemeral: true });
   }
 
@@ -425,7 +451,6 @@ client.on("interactionCreate", async (interaction) => {
         return interaction.reply({ content: `❌ Car number **${numberToClaim}** is already taken/reserved in ${league}!`, ephemeral: true });
     }
 
-    // Add to claims with Object structure
     carNumberClaims[league].push({
         number: numberToClaim,
         userId: user.id
@@ -433,6 +458,7 @@ client.on("interactionCreate", async (interaction) => {
     
     saveCarNumberClaims();
     updateClaimBoard(guild);
+    sendDataBackup(guild, "CLAIM_NUMBER");
 
     return interaction.reply({ content: `✅ Successfully claimed/reserved number **${numberToClaim}** in ${league}.`, ephemeral: true });
   }
@@ -455,6 +481,7 @@ client.on("interactionCreate", async (interaction) => {
       if (member) await member.setNickname(`${carNumber} | ${username} ${flag}`);
     } catch {}
 
+    sendDataBackup(guild, "REGISTER");
     return interaction.reply({ content: `Registered as ${carNumber} | ${username} ${flag} in ${league}`, ephemeral: true });
   }
 
@@ -479,6 +506,8 @@ client.on("interactionCreate", async (interaction) => {
 
     updateLiveLineup(guild, league);
     sendEmbed(guild, "Sign", `<@${target.id}> signed as ${role} in ${team}`, "Green", user.tag, config.updateChannelId);
+    sendDataBackup(guild, "SIGN");
+
     return interaction.reply({ content: `Signed ${target.tag} as ${role} in ${team}`, ephemeral: true });
   }
 
@@ -507,6 +536,8 @@ client.on("interactionCreate", async (interaction) => {
 
     updateLiveLineup(guild, league);
     sendEmbed(guild, "Move", `<@${target.id}> moved to ${role} in ${team}`, "Orange", user.tag, config.updateChannelId);
+    sendDataBackup(guild, "MOVE");
+
     return interaction.reply({ content: `Moved ${target.tag} to ${role} in ${team}`, ephemeral: true });
   }
 
@@ -526,6 +557,8 @@ client.on("interactionCreate", async (interaction) => {
 
     updateLiveLineup(guild, league);
     sendEmbed(guild, "Release", `<@${target.id}> released from all roles in ${league}`, "Red", user.tag, config.updateChannelId);
+    sendDataBackup(guild, "RELEASE");
+
     return interaction.reply({ content: `Released ${target.tag} from all roles in ${league}`, ephemeral: true });
   }
 
@@ -533,5 +566,22 @@ client.on("interactionCreate", async (interaction) => {
   if (commandName === "lineupyear") {
     updateLiveLineup(guild, league);
     return interaction.reply({ content: `${league} lineup updated!`, ephemeral: true });
+  }
+
+  // -------------------- PROFILE --------------------
+  if (commandName === "profile") {
+    const targetUser = options.getUser("user") || user;
+    const pData = assignedPlayers[targetUser.id];
+    const rData = registrationData[targetUser.id];
+
+    const embed = new EmbedBuilder()
+      .setTitle(`Profile: ${targetUser.tag}`)
+      .setColor("Blue")
+      .addFields(
+        { name: "Team/Role", value: pData ? `${pData.team} - ${pData.role}` : "Not Signed" },
+        { name: "Registration", value: rData ? `Car: ${rData.carnumber} | Flag: ${rData.flag}` : "Not Registered" }
+      );
+    
+    return interaction.reply({ embeds: [embed] });
   }
 });
