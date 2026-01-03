@@ -15,12 +15,20 @@ import {
     MessageFlags 
 } from "discord.js";
 
-// --- CONFIGURATION ---
+// --- CHANNELS ---
 const BACKUP_CHANNEL_ID = "1452397713252548638"; 
-const CAR_REGISTRY_CHANNEL_ID = "1452244527749533726"; // Added for future use
+const CAR_REGISTRY_CHANNEL_ID = "1452244527749533726"; 
+
+// --- BUGGED IDS (Blacklist) ---
+// The bot will NEVER use these, even if they are in the backup file.
+const BANNED_IDS = [
+    "1452292153806950400",
+    "1452400031377395722",
+    "1452400029078913155"
+];
 
 // ========================
-// 🛑 DEFAULT DATA (Hardcoded Source of Truth) 🛑
+// 🛑 DEFAULT DATA (The Foundation) 🛑
 // ========================
 const DEFAULTS = {
     assignedF1: {
@@ -95,16 +103,14 @@ const DEFAULTS = {
         ]
     },
     liveLineup: {
-        // 🛑 CLEARED: We set these to empty strings so the bot creates FRESH messages
-        // instead of trying to edit the old bugged IDs.
-        "F1": "", 
-        "F2": ""
+        "F1": null, // Start fresh
+        "F2": null  // Start fresh
     },
     registration: {}
 };
 
 // ========================
-// INITIAL STATE
+// INITIAL STATE (Starts with DEFAULTS)
 // ========================
 let assignedPlayersF1 = JSON.parse(JSON.stringify(DEFAULTS.assignedF1));
 let assignedPlayersF2 = JSON.parse(JSON.stringify(DEFAULTS.assignedF2));
@@ -113,7 +119,7 @@ let liveLineupIds = JSON.parse(JSON.stringify(DEFAULTS.liveLineup));
 let carNumberClaims = JSON.parse(JSON.stringify(DEFAULTS.carClaims));
 
 // ========================
-// PERSISTENCE (DISCORD ONLY)
+// PERSISTENCE (MERGE LOGIC)
 // ========================
 const saveData = async (reason) => {
     try {
@@ -144,6 +150,7 @@ const loadData = async () => {
         const channel = await client.channels.fetch(BACKUP_CHANNEL_ID);
         if (!channel?.isTextBased()) return;
 
+        // Fetch last 5 messages, look for one with an attachment
         const messages = await channel.messages.fetch({ limit: 5 });
         const backupMsg = messages.find(m => m.attachments.size > 0);
 
@@ -151,23 +158,45 @@ const loadData = async () => {
             const response = await fetch(backupMsg.attachments.first().url);
             const data = await response.json();
 
-            if (data.assignedPlayersF1) assignedPlayersF1 = data.assignedPlayersF1;
-            if (data.assignedPlayersF2) assignedPlayersF2 = data.assignedPlayersF2;
-            if (data.registrationData) registrationData = data.registrationData;
-            
-            // We load liveLineupIds from backup, BUT if they match the old bugged ones, we reset them
-            // This is a safety check during load
-            if (data.liveLineupIds) {
-                liveLineupIds = data.liveLineupIds;
-                if(liveLineupIds.F1 === "1452400029078913155") liveLineupIds.F1 = "";
-                if(liveLineupIds.F2 === "1452400031377395722") liveLineupIds.F2 = "";
+            // ⚡ ACCUMULATE STRATEGY ⚡
+            // 1. We keep the DEFAULTS as the base (already loaded in Initial State).
+            // 2. We MERGE the backup data on top. 
+            //    (Spread operator `...` takes the second object and overwrites matches in the first)
+
+            if (data.assignedPlayersF1) {
+                assignedPlayersF1 = { ...assignedPlayersF1, ...data.assignedPlayersF1 };
+            }
+            if (data.assignedPlayersF2) {
+                assignedPlayersF2 = { ...assignedPlayersF2, ...data.assignedPlayersF2 };
+            }
+            if (data.registrationData) {
+                registrationData = { ...registrationData, ...data.registrationData };
+            }
+            if (data.carNumberClaims) {
+                // For arrays, we usually trust the backup fully if it exists
+                carNumberClaims = data.carNumberClaims; 
             }
 
-            if (data.carNumberClaims) carNumberClaims = data.carNumberClaims;
+            // ⚡ ID CHECKER ⚡
+            if (data.liveLineupIds) {
+                // If backup has IDs, load them...
+                liveLineupIds = { ...liveLineupIds, ...data.liveLineupIds };
+                
+                // ...BUT immediately check against BANNED_IDS. 
+                // If a banned ID is found, wipe it so the bot makes a new one.
+                if (BANNED_IDS.includes(liveLineupIds.F1)) {
+                    console.log("⚠️ Found BANNED F1 ID in backup. Ignoring.");
+                    liveLineupIds.F1 = null; 
+                }
+                if (BANNED_IDS.includes(liveLineupIds.F2)) {
+                    console.log("⚠️ Found BANNED F2 ID in backup. Ignoring.");
+                    liveLineupIds.F2 = null; 
+                }
+            }
 
-            console.log("♻️ Data restored from Cloud Backup.");
+            console.log("♻️ Data Merged: Defaults + Cloud Backup.");
         } else {
-            console.log("⚠️ No cloud backup found. Using DEFAULTS.");
+            console.log("⚠️ No cloud backup found. Using pure DEFAULTS.");
         }
     } catch (err) {
         console.error("Cloud Restore Failed (Using Defaults):", err);
@@ -197,7 +226,7 @@ const seriesConfigs = {
       "Reserve Driver F1": { id: "1432739468770541739", max: 2 },
       "Engineer F1": { id: "1432786005106102342", max: 2 }
     },
-    updateChannelId: "1432370687888064735",
+    updateChannelId: "0",
     liveLineupChannelId: "1432370391929716787" // Verified F1 Lineup Channel
   },
   F2: {
@@ -219,7 +248,7 @@ const seriesConfigs = {
       "Reserve Driver F2": { id: "1436021153977077771", max: 2 },
       "Engineer F2": { id: "1435197815461642400", max: 2 }
     },
-    updateChannelId: "1432371785181040640",
+    updateChannelId: "0",
     liveLineupChannelId: "1432371611927056544" // Verified F2 Lineup Channel
   }
 };
@@ -267,25 +296,33 @@ const updateLiveLineup = async (guild, series) => {
   }
 
   const channel = guild.channels.cache.get(config.liveLineupChannelId);
-  if (!channel?.isTextBased()) return;
+  if (!channel?.isTextBased()) {
+      console.log(`❌ Lineup Channel ${series} not found.`);
+      return;
+  }
 
   try {
-    // If ID exists and is NOT empty string
-    if (liveLineupIds[series] && liveLineupIds[series].length > 0) {
-      const msg = await channel.messages.fetch(liveLineupIds[series]).catch(() => null);
-      if (msg) {
-          await msg.edit({ embeds: [embed] });
-      } else {
-          // Message not found (deleted manually or invalid ID), create new
-          const newMsg = await channel.send({ embeds: [embed] });
-          liveLineupIds[series] = newMsg.id;
-          await saveData("FixLiveEmbed");
-      }
+    // Check if ID exists AND is not null/empty
+    const existingMsgId = liveLineupIds[series];
+
+    if (existingMsgId) {
+        // Try to fetch it
+        const msg = await channel.messages.fetch(existingMsgId).catch(() => null);
+        
+        if (msg) {
+            // It exists and is valid, edit it
+            await msg.edit({ embeds: [embed] });
+        } else {
+            // It was deleted (or is a bad ID that slipped through), create new
+            const newMsg = await channel.send({ embeds: [embed] });
+            liveLineupIds[series] = newMsg.id;
+            await saveData("FixLiveEmbed");
+        }
     } else {
-      // No ID stored, create new
-      const msg = await channel.send({ embeds: [embed] });
-      liveLineupIds[series] = msg.id;
-      await saveData("NewLiveEmbed");
+        // No ID currently stored, create new
+        const newMsg = await channel.send({ embeds: [embed] });
+        liveLineupIds[series] = newMsg.id;
+        await saveData("NewLiveEmbed");
     }
   } catch (e) { console.error("Lineup error:", e); }
 };
@@ -351,8 +388,13 @@ client.once("ready", async () => {
   console.log(`Bot Active: ${client.user.tag}`);
   await loadData(); 
   
-  // Force a sync shortly after startup to ensure any ID fixes in loadData are persisted
-  setTimeout(() => saveData("StartupSync"), 5000);
+  // Wait 5 seconds, then try to update the embeds (this handles fresh creation if IDs were banned)
+  setTimeout(() => {
+    // We can't easily get Guild object here without an ID, but commands will trigger updates.
+    // If you want auto-update on restart, we need the guild ID. 
+    // For now, we just save the 'merged' state to ensure the backup is clean.
+    saveData("StartupSync");
+  }, 5000);
 
   try {
     await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
@@ -402,7 +444,7 @@ client.on("interactionCreate", async interaction => {
         assignedPlayersF1 = JSON.parse(JSON.stringify(DEFAULTS.assignedF1));
         assignedPlayersF2 = JSON.parse(JSON.stringify(DEFAULTS.assignedF2));
         registrationData = {};
-        liveLineupIds = JSON.parse(JSON.stringify(DEFAULTS.liveLineup)); // This will reset IDs to empty strings
+        liveLineupIds = { F1: null, F2: null }; // Force Reset
         carNumberClaims = JSON.parse(JSON.stringify(DEFAULTS.carClaims));
         await saveData("ResetData");
         return interaction.editReply({ content: "✅ All data reset to DEFAULT state!" });
